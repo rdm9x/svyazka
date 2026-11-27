@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.1 — 2026-11-27
+
+- **Fix:** the app window opened without Touch ID when the agent was already unlocked (e.g. after an agent used
+  Svyazka), and its password form accepted any password in that state. Now the window always requires Touch ID /
+  Windows Hello or the correct master password; agents keep working within the unlocked session.
+
 ## 1.4.0 — 2026-11-27
 
 - **Unlock with Touch ID / Windows Hello**: after one password unlock the vault key is kept in the macOS Keychain

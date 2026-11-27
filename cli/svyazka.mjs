@@ -71,6 +71,11 @@ function qLoad(id, reason) {
   }
   return sys.quickLoad(id, reason, QOPT);
 }
+// Подтвердить, что за компьютером владелец (для окна приложения при уже открытом агенте)
+function qVerify(reason) {
+  if (TEST) return { '1': 'ok', '0': 'denied' }[process.env.SVYAZKA_TEST_QUICK] || 'unavailable';
+  return sys.verifyUser(reason, TOUCHID);
+}
 function qDelete(id) { if (TEST) fs.rmSync(QTEST(), { force: true }); else sys.quickDelete(id, QOPT); }
 const GUI = sys.GUI;
 
@@ -619,10 +624,26 @@ function runAgent() {
             let a = {};
             try { a = JSON.parse(body || '{}'); } catch {}
             const json = (code, v) => { rsp.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); rsp.end(JSON.stringify(v)); };
+            // Окно приложения всегда требует владельца: отпечаток или верный мастер-пароль — даже если агент уже открыт.
             try {
-              const was = !!st.key;
-              await ensureUnlocked('Связка', typeof a.password === 'string' ? { password: a.password } : { passwordFallback: false });
-              if (!was) audit('приложение', 'unlock', '', typeof a.password === 'string' ? 'паролем' : sys.VERIFY_NAME);
+              const byPassword = typeof a.password === 'string';
+              if (st.key) {
+                await reload();
+                if (byPassword) {
+                  const raw = await core.deriveRaw(a.password, st.salt, st.iter);
+                  if (raw.length !== st.raw.length || !raw.every((b, i) => b === st.raw[i])) fail('Неверный мастер-пароль', 'BAD_PASSWORD');
+                  if (quickEnabled() && (GUI || TEST)) qStore(quickId(st.saltB64), core.b64e(st.raw));
+                } else {
+                  if (!quickEnabled() || !(GUI || TEST)) fail('Нужен мастер-пароль', 'NEED_PASSWORD');
+                  const v = qVerify('открыть Связку');
+                  if (v === 'denied') fail('Не подтверждено', 'DENIED');
+                  if (v !== 'ok') fail('Нужен мастер-пароль', 'NEED_PASSWORD');
+                }
+                st.lastUse = Date.now();
+              } else {
+                await ensureUnlocked('Связка', byPassword ? { password: a.password } : { passwordFallback: false });
+              }
+              audit('приложение', 'unlock', '', byPassword ? 'паролем' : sys.VERIFY_NAME);
               json(200, { raw: core.b64e(st.raw), salt: st.saltB64, iter: st.iter, verify: sys.VERIFY_NAME });
             } catch (e) { json(401, { code: e.code || 'ERROR', error: e.message }); }
           });

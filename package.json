@@ -1,6 +1,6 @@
 {
   "name": "svyazka",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "private": true,
   "description": "Local encrypted keyring (macOS, Windows, Linux) that AI coding agents (Claude Code, Codex) can use without seeing your secrets",
   "type": "module",

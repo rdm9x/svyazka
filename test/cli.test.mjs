@@ -173,3 +173,18 @@ test('окно приложения: /api/unlock по отпечатку и па
   r = await post('/api/unlock', { password: 'test-pass-123' });
   assert.equal(r.status, 200);
 });
+
+test('окно приложения не открывается само, если агент уже открыт', async (t) => {
+  const s = sandbox({ SVYAZKA_TEST_QUICK: '0' }); t.after(s.stop);
+  s.run(['init']);
+  s.run(['ls']); // агент открыт (как после работы Codex)
+  const url = new URL(s.run(['ui', '--print']).stdout.trim());
+  const post = (body) => fetch(new URL('/api/unlock', url), { method: 'POST', headers: { 'X-Svyazka-Token': url.searchParams.get('t') }, body: JSON.stringify(body) });
+  let r = await post({});
+  assert.equal(r.status, 401, 'без отпечатка — нельзя');
+  assert.equal((await r.json()).code, 'DENIED');
+  r = await post({ password: 'не-тот-пароль' });
+  assert.equal(r.status, 401, 'неверный пароль не принимается, даже когда агент открыт');
+  assert.equal((await r.json()).code, 'BAD_PASSWORD');
+  assert.equal((await post({ password: 'test-pass-123' })).status, 200);
+});

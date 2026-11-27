@@ -3,7 +3,7 @@
 import { ITER, uid, rand, deriveKey, seal, openVault, decryptWith, importRaw, b64d, newVault, normalize, mergeData, tombstone, isVaultBlob, isPlainImport,
   addMonths, todayISO, markPaid, planPlainImport } from './core.js';
 
-const VERSION = '1.4.0';
+const VERSION = '1.4.1';
 
 const $ = (s, r = document) => r.querySelector(s);
 const app = $('#app');
