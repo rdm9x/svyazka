@@ -23,7 +23,7 @@ end to end.
 ```bash
 sh cli/install.sh       # links ~/.local/bin/svyazka to your checkout
 sh cli/build-app.sh     # rebuilds ~/Applications/Связка.app
-npm test                # or: node --test test/
+npm test                # or: node --test 'test/*.test.mjs'
 ```
 
 Use a throw-away vault while developing — never your real one:

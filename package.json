@@ -9,7 +9,7 @@
   "os": ["darwin"],
   "bin": { "svyazka": "cli/svyazka.mjs" },
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test 'test/*.test.mjs'",
     "pack": "./pack.sh",
     "install-local": "sh install.sh"
   }

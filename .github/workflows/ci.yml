@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: 22
       - name: Tests (core everywhere, CLI on macOS)
-        run: node --test test/
+        run: node --test 'test/*.test.mjs'
       - name: Build Touch ID helper and Связка.app
         if: runner.os == 'macOS'
         run: |
