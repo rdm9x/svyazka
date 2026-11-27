@@ -30,6 +30,8 @@ Every access is logged with who did it — you, Claude or Codex.
 - **Desktop app** — `Связка.app` on macOS, a Start-menu app on Windows (Edge app window), `svyazka ui` on Linux. Shelves (one per project or server), passwords, SSH keys, tokens, notes, upcoming payments for
   servers, domains and subscriptions. Three-pane layout, dark and light themes, ⌘F / ⌘N / ⌘L.
 - **`svyazka` CLI + agent** — the key stays in memory like `ssh-agent`, auto-locks after 30 min idle.
+- **Unlock with Touch ID / Windows Hello** — type the master password once; after that the app and the agents open
+  Svyazka with your fingerprint (`svyazka config quick-unlock off` to disable).
 - **Built for agents** — a skill for Claude Code and Codex, plus a standing rule: *any new secret goes into Svyazka
   immediately*. Generated a DB password, created a deploy key, received a token — the agent saves it and tells you where.
 - **No server, no account** — AES-256-GCM, key derived from your master password (PBKDF2-SHA256, 600k iterations).

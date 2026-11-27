@@ -111,6 +111,48 @@ export function verifyUser(reason, touchidHelper) {
   return 'unavailable';
 }
 
+/* ── быстрая разблокировка: ключ хранилища за Touch ID / Windows Hello ── */
+// macOS: связка ключей через помощник svyazka-touchid. Windows: файл, зашифрованный DPAPI (только этот пользователь),
+// расшифровка — после Windows Hello. Linux: нет.
+
+export const QUICK = MAC || WIN;
+
+const PS_QUICK_STORE = `
+Add-Type -AssemblyName System.Security
+$raw = [Convert]::FromBase64String([Console]::In.ReadToEnd().Trim())
+$enc = [Security.Cryptography.ProtectedData]::Protect($raw, [Text.Encoding]::UTF8.GetBytes('svyazka'), 'CurrentUser')
+[IO.File]::WriteAllBytes($env:SV_FILE, $enc)`;
+
+const PS_QUICK_LOAD = PS_HELLO.replace("if ($r -eq 'Verified') { exit 0 } else { exit 1 }", `if ($r -ne 'Verified') { exit 1 }
+  Add-Type -AssemblyName System.Security
+  $raw = [Security.Cryptography.ProtectedData]::Unprotect([IO.File]::ReadAllBytes($env:SV_FILE), [Text.Encoding]::UTF8.GetBytes('svyazka'), 'CurrentUser')
+  [Console]::Out.Write([Convert]::ToBase64String($raw)); exit 0`);
+
+// raw — base64 ключа. true, если сохранено.
+export function quickStore(id, raw, { touchid, dir }) {
+  if (MAC) return !!touchid && fs.existsSync(touchid) && spawnSync(touchid, ['--store', id], { input: raw }).status === 0;
+  if (WIN) return ps(PS_QUICK_STORE, { env: { SV_FILE: path.join(dir, `quick-${id}.bin`) }, input: raw, timeout: 20000 }).status === 0;
+  return false;
+}
+// { raw } | { status: 'denied' | 'unavailable' | 'none' }
+export function quickLoad(id, reason, { touchid, dir }) {
+  let r;
+  if (MAC) {
+    if (!touchid || !fs.existsSync(touchid)) return { status: 'unavailable' };
+    r = spawnSync(touchid, ['--load', id, reason], { encoding: 'utf8' });
+  } else if (WIN) {
+    const file = path.join(dir, `quick-${id}.bin`);
+    if (!fs.existsSync(file)) return { status: 'none' };
+    r = ps(PS_QUICK_LOAD, { env: { SV_TEXT: reason, SV_FILE: file }, timeout: 120000 });
+  } else return { status: 'unavailable' };
+  if (r.status === 0 && r.stdout) return { raw: String(r.stdout).trim() };
+  return { status: r.status === 1 ? 'denied' : r.status === 3 ? 'none' : 'unavailable' };
+}
+export function quickDelete(id, { touchid, dir }) {
+  if (MAC && touchid && fs.existsSync(touchid)) spawnSync(touchid, ['--delete', id]);
+  if (WIN) fs.rmSync(path.join(dir, `quick-${id}.bin`), { force: true });
+}
+
 /* ── буфер обмена ── */
 
 export function clipboardSet(text) {

@@ -34,6 +34,13 @@ export const FORMAT = 2;
 const MIN_ITER = 100000;
 const aad = (h) => enc.encode(JSON.stringify(['svyazka', h.v, h.kdf, h.iter, h.salt]));
 
+// Ключ в «сыром» виде (32 байта) — для разблокировки по Touch ID / Windows Hello. Тот же ключ, что deriveKey.
+export async function deriveRaw(pw, salt, iter = ITER) {
+  const base = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveBits']);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' }, base, 256));
+}
+export const importRaw = (raw) => crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+
 // sess = { key, salt, iter, data }
 export async function seal(sess) {
   const iv = rand(12);

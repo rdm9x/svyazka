@@ -135,3 +135,41 @@ test('Windows: агент не отвечает без ключа доступа
   assert.equal(await ask('wrong'), '');
   assert.match(await ask(a.token), /"ok":true/);
 });
+
+test('открытие по отпечатку: после пароля ключ запоминается, дальше пароль не нужен', async (t) => {
+  const s = sandbox(); t.after(s.stop);
+  s.run(['init']);
+  s.run(['add', 'note', 'n', '--text', 'x']);
+  s.run(['stop']);
+  const noPw = { SVYAZKA_TEST_PASSWORD: undefined, SVYAZKA_NO_GUI: '1' };
+  // отпечаток подтверждён — открывается без пароля
+  let r = s.run(['ls'], { env: { ...noPw, SVYAZKA_TEST_QUICK: '1' } });
+  assert.equal(r.status, 0, r.stderr);
+  s.run(['stop']);
+  // отпечаток отклонён, пароля нет — не открывается
+  r = s.run(['ls'], { env: { ...noPw, SVYAZKA_TEST_QUICK: '0' } });
+  assert.notEqual(r.status, 0);
+  s.run(['stop']);
+  // выключили — ключ удалён, без пароля не открыть
+  assert.match(s.run(['config', 'quick-unlock', 'off']).stdout, /выключено/);
+  r = s.run(['ls'], { env: { ...noPw, SVYAZKA_TEST_QUICK: '1' } });
+  assert.notEqual(r.status, 0);
+});
+
+test('окно приложения: /api/unlock по отпечатку и паролю, /api/lock', async (t) => {
+  const s = sandbox({ SVYAZKA_TEST_QUICK: '1' }); t.after(s.stop);
+  s.run(['init']);
+  const url = new URL(s.run(['ui', '--print']).stdout.trim());
+  const tok = url.searchParams.get('t');
+  const post = (p, body, token = tok) => fetch(new URL(p, url), { method: 'POST', headers: { 'X-Svyazka-Token': token }, body: body && JSON.stringify(body) });
+  assert.equal((await post('/api/unlock', {}, 'wrong')).status, 403);
+  let r = await post('/api/unlock', {});
+  assert.equal(r.status, 200);
+  assert.equal(Buffer.from((await r.json()).raw, 'base64').length, 32);
+  assert.equal((await post('/api/lock')).status, 204);
+  r = await post('/api/unlock', { password: 'wrong-wrong' });
+  assert.equal(r.status, 401);
+  assert.equal((await r.json()).code, 'BAD_PASSWORD');
+  r = await post('/api/unlock', { password: 'test-pass-123' });
+  assert.equal(r.status, 200);
+});

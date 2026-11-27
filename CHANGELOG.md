@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.0 — 2026-11-27
+
+- **Unlock with Touch ID / Windows Hello**: after one password unlock the vault key is kept in the macOS Keychain
+  (behind the Touch ID helper) or in a DPAPI-protected file (behind Windows Hello). The app asks for the fingerprint
+  when it opens; one unlock covers the app and the agents. `svyazka config quick-unlock on|off`.
+- The app's lock (button, ⌘/Ctrl+L) also locks the agent.
+- Clear wording in the dialog where an agent asks you to type a value; the skill avoids such dialogs when the agent
+  can save the value itself.
+- Touch ID helper distinguishes “cancelled” from “unavailable” (then falls back to a confirmation dialog).
+
 ## 1.3.0 — 2026-11-27
 
 - **Windows support**: `install.ps1`, `svyazka` command, Start-menu shortcut (Edge app window), Windows Hello for

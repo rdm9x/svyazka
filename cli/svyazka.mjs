@@ -12,6 +12,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import * as core from '../core.js';
 import * as sys from './platform.mjs';
 
@@ -51,6 +52,26 @@ const fail = (m, code, extra) => { throw new UserError(m, code, extra); };
 
 // Ответы, которые клиент передал из терминала (когда окон macOS нет: вход по SSH и т. п.)
 const answers = new AsyncLocalStorage();
+
+// Быстрая разблокировка (Touch ID / Windows Hello): ключ хранилища в связке ключей / DPAPI.
+// id записи зависит от папки и соли хранилища — после смены пароля старый ключ просто не найдётся.
+const quickId = (saltB64) => 'vault-' + createHash('sha256').update(DIR + '|' + saltB64).digest('hex').slice(0, 16);
+const quickEnabled = () => readJSON(CONFIG).quickUnlock !== false && (sys.QUICK || TEST);
+const QOPT = { touchid: TOUCHID, dir: DIR };
+const QTEST = () => path.join(DIR, 'quick-test.json');
+function qStore(id, raw) {
+  if (TEST) { writeJSON(QTEST(), { id, raw }); return true; }
+  return sys.quickStore(id, raw, QOPT);
+}
+function qLoad(id, reason) {
+  if (TEST) {
+    if (process.env.SVYAZKA_TEST_QUICK === '0') return { status: 'denied' };
+    const q = readJSON(QTEST());
+    return process.env.SVYAZKA_TEST_QUICK === '1' && q.id === id ? { raw: q.raw } : { status: 'none' };
+  }
+  return sys.quickLoad(id, reason, QOPT);
+}
+function qDelete(id) { if (TEST) fs.rmSync(QTEST(), { force: true }); else sys.quickDelete(id, QOPT); }
 const GUI = sys.GUI;
 
 // Спросить у человека: тест → ответ из терминала → окно macOS → попросить клиента спросить в терминале
@@ -75,7 +96,7 @@ function runAgent() {
   let ui = null;
   let clipTimer = null;
 
-  const lockNow = () => { Object.assign(st, { key: null, salt: null, saltB64: null, data: null, fileText: null, unlockedAt: 0 }); };
+  const lockNow = () => { Object.assign(st, { key: null, raw: null, salt: null, saltB64: null, data: null, fileText: null, unlockedAt: 0 }); };
   setInterval(() => {
     if (st.key && (Date.now() - st.lastUse > IDLE_MIN * 60000 || Date.now() - st.unlockedAt > MAX_HOURS * 3600000)) lockNow();
   }, 15000).unref();
@@ -109,21 +130,38 @@ function runAgent() {
     st.fileText = out;
   }
 
-  async function ensureUnlocked(reason) {
+  // opts: { password } — пароль уже известен (окно приложения); { passwordFallback: false } — только отпечаток
+  async function ensureUnlocked(reason, opts = {}) {
     if (st.key) { await reload(); st.lastUse = Date.now(); return; }
     const text = readVault();
     if (!text) fail('Хранилища нет. Создайте: svyazka init (или svyazka import <бэкап>)');
     unlocking ||= (async () => {
       const blob = JSON.parse(text);
+      const id = quickId(blob.salt);
+      const open = async (raw) => {
+        const key = await core.importRaw(raw);
+        const data = await core.decryptWith(blob, key);
+        Object.assign(st, { key, raw, salt: core.b64d(blob.salt), saltB64: blob.salt, iter: blob.iter, data, fileText: text, unlockedAt: Date.now(), lastUse: Date.now() });
+      };
+      // 1. отпечаток
+      if (opts.password == null && quickEnabled() && (GUI || TEST)) {
+        const q = qLoad(id, 'открыть Связку'); // macOS: «…пытается открыть Связку»
+        if (q.raw) {
+          try { await open(core.b64d(q.raw)); return; } catch { qDelete(id); } // ключ устарел — пароль сменили
+        }
+        if (q.status === 'denied' && opts.passwordFallback === false) fail('Не подтверждено', 'DENIED');
+      }
+      if (opts.passwordFallback === false) fail('Нужен мастер-пароль', 'NEED_PASSWORD');
+      // 2. мастер-пароль
       for (let attempt = 0; attempt < 3; attempt++) {
-        const pw = prompt('password', `${reason}\n\nВведите мастер-пароль${attempt ? ' (неверный, ещё раз)' : ''}:`);
+        const pw = opts.password ?? prompt('password', `${reason}\n\nВведите мастер-пароль${attempt ? ' (неверный, ещё раз)' : ''}:`);
         if (pw == null) fail('Отменено: хранилище не открыто');
         try {
-          const o = await core.openVault(blob, pw);
-          Object.assign(st, { key: o.key, salt: o.salt, saltB64: blob.salt, iter: o.iter, data: o.data, fileText: text, unlockedAt: Date.now(), lastUse: Date.now() });
+          await open(await core.deriveRaw(pw, core.b64d(blob.salt), blob.iter));
+          if (quickEnabled() && (GUI || TEST)) qStore(id, core.b64e(st.raw));
           return;
         } catch {}
-        if (!GUI || TEST) break; // из терминала — одна попытка за запрос, повторит клиент
+        if (opts.password != null || !GUI || TEST) break; // одна попытка за запрос, повторит клиент
       }
       fail('Неверный мастер-пароль', 'BAD_PASSWORD');
     })().finally(() => { unlocking = null; });
@@ -330,9 +368,11 @@ function runAgent() {
       const p2 = prompt('new2', 'Повторите мастер-пароль:');
       if (p1 !== p2) fail('Пароли не совпадают');
       const salt = core.rand(16);
-      Object.assign(st, { key: await core.deriveKey(p1, salt), salt, iter: core.ITER, data: core.newVault(), unlockedAt: Date.now(), lastUse: Date.now() });
+      const raw = await core.deriveRaw(p1, salt);
+      Object.assign(st, { key: await core.importRaw(raw), raw, salt, iter: core.ITER, data: core.newVault(), unlockedAt: Date.now(), lastUse: Date.now() });
       st.saltB64 = core.b64e(salt);
       await persist();
+      if (quickEnabled() && (GUI || TEST)) qStore(quickId(st.saltB64), core.b64e(raw));
       audit(c, 'init');
       return 'Хранилище создано: ' + VAULT;
     },
@@ -569,6 +609,25 @@ function runAgent() {
         const host = req.headers.host || '';
         if (host !== `127.0.0.1:${srv.address().port}`) { rsp.writeHead(403); return rsp.end(); }
         const url = new URL(req.url, 'http://x');
+        if (url.pathname === '/api/unlock' || url.pathname === '/api/lock') {
+          if (req.headers['x-svyazka-token'] !== token || req.method !== 'POST') { rsp.writeHead(403); return rsp.end(); }
+          if (url.pathname === '/api/lock') { lockNow(); audit('приложение', 'lock'); rsp.writeHead(204); return rsp.end(); }
+          let body = '';
+          req.setEncoding('utf8');
+          req.on('data', (d) => { body += d; if (body.length > 4096) req.destroy(); });
+          req.on('end', async () => {
+            let a = {};
+            try { a = JSON.parse(body || '{}'); } catch {}
+            const json = (code, v) => { rsp.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); rsp.end(JSON.stringify(v)); };
+            try {
+              const was = !!st.key;
+              await ensureUnlocked('Связка', typeof a.password === 'string' ? { password: a.password } : { passwordFallback: false });
+              if (!was) audit('приложение', 'unlock', '', typeof a.password === 'string' ? 'паролем' : sys.VERIFY_NAME);
+              json(200, { raw: core.b64e(st.raw), salt: st.saltB64, iter: st.iter, verify: sys.VERIFY_NAME });
+            } catch (e) { json(401, { code: e.code || 'ERROR', error: e.message }); }
+          });
+          return;
+        }
         if (url.pathname === '/api/vault') {
           if (req.headers['x-svyazka-token'] !== token) { rsp.writeHead(403); return rsp.end(); }
           if (req.method === 'GET') {
@@ -830,6 +889,7 @@ const HELP = `svyazka — Связка: ключница для людей и И
   svyazka pay | paid <запись>             платежи / отметить оплату
   svyazka sync                            бэкап и обмен между компьютерами через папку (iCloud Drive, OneDrive…)
   svyazka config [sync-dir <папка>]       настройки: где лежат файлы, папка для sync
+  svyazka config quick-unlock on|off      открывать Связку по Touch ID / Windows Hello (по умолчанию включено)
   svyazka ui                              открыть интерфейс Связки в браузере
   svyazka log [N]                         журнал действий
 
@@ -943,9 +1003,20 @@ async function main() {
         writeJSON(CONFIG, { ...readJSON(CONFIG), syncDir: dir });
         return console.log('Папка для sync: ' + dir);
       }
-      if (args[0]) fail('svyazka config [sync-dir <папка>]');
-      return out({ vault: VAULT, syncDir: syncDir(), log: LOG, app: WEBROOT }, (c) =>
-        console.log(`хранилище: ${c.vault}\nпапка sync: ${c.syncDir}\nжурнал:     ${c.log}\nпрограмма:  ${c.app}`));
+      if (args[0] === 'quick-unlock') {
+        const on = { on: true, off: false }[args[1]];
+        if (on === undefined) fail('svyazka config quick-unlock on|off');
+        fs.mkdirSync(DIR, { recursive: true, mode: 0o700 });
+        writeJSON(CONFIG, { ...readJSON(CONFIG), quickUnlock: on });
+        if (!on) {
+          try { const salt = JSON.parse(fs.readFileSync(VAULT, 'utf8')).salt; if (TEST) fs.rmSync(path.join(DIR, 'quick-test.json'), { force: true }); else sys.quickDelete(quickId(salt), { touchid: TOUCHID, dir: DIR }); } catch {}
+        }
+        return console.log(on ? `Открытие по ${sys.VERIFY_NAME}: включено (сработает после следующего ввода пароля)` : `Открытие по ${sys.VERIFY_NAME}: выключено, сохранённый ключ удалён`);
+      }
+      if (args[0]) fail('svyazka config [sync-dir <папка> | quick-unlock on|off]');
+      const quick = readJSON(CONFIG).quickUnlock !== false && sys.QUICK;
+      return out({ vault: VAULT, syncDir: syncDir(), log: LOG, app: WEBROOT, quickUnlock: quick }, (c) =>
+        console.log(`хранилище: ${c.vault}\nпапка sync: ${c.syncDir}\nжурнал:     ${c.log}\nпрограмма:  ${c.app}\nоткрытие по ${sys.VERIFY_NAME}: ${sys.QUICK ? (c.quickUnlock ? 'включено' : 'выключено') : 'недоступно на этой системе'}`));
     }
     case 'ui': {
       const r = await call('ui');

@@ -95,3 +95,11 @@ test('оплата: перенос даты с учётом коротких м�
   c.markPaid(once);
   assert.equal(once.f.done, true);
 });
+
+test('deriveRaw даёт тот же ключ, что deriveKey', async () => {
+  const salt = c.rand(16);
+  const s = { key: await c.deriveKey('pw-12345678', salt, ITER), salt, iter: ITER, data: c.newVault() };
+  const blob = await c.seal(s);
+  const key2 = await c.importRaw(await c.deriveRaw('pw-12345678', salt, ITER));
+  assert.ok(await c.decryptWith(blob, key2));
+});

@@ -1,9 +1,9 @@
 // Связка — ключи, пароли и оплаты. Всё шифруется на устройстве, сети не нужно.
 
-import { ITER, uid, rand, deriveKey, seal, openVault, decryptWith, newVault, normalize, mergeData, tombstone, isVaultBlob, isPlainImport,
+import { ITER, uid, rand, deriveKey, seal, openVault, decryptWith, importRaw, b64d, newVault, normalize, mergeData, tombstone, isVaultBlob, isPlainImport,
   addMonths, todayISO, markPaid, planPlainImport } from './core.js';
 
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 
 const $ = (s, r = document) => r.querySelector(s);
 const app = $('#app');
@@ -100,6 +100,13 @@ const store = (() => {
       cache = v;
     },
     async remove() { await api('DELETE'); cache = null; },
+    // открыть через агента: без пароля — по Touch ID / Windows Hello, с паролем — проверить его
+    async unlock(password) {
+      const r = await fetch('/api/unlock', { method: 'POST', headers: { 'X-Svyazka-Token': token, 'Content-Type': 'application/json' },
+        body: JSON.stringify(password == null ? {} : { password }), cache: 'no-store' });
+      return { ok: r.ok, ...(await r.json().catch(() => ({}))) };
+    },
+    lockAgent() { return fetch('/api/lock', { method: 'POST', headers: { 'X-Svyazka-Token': token } }).catch(() => {}); },
   };
 })();
 
@@ -331,17 +338,20 @@ const staticField = (label, html) => `<div class="fv"><div class="fl">${esc(labe
 
 /* ───────────── views ───────────── */
 
+const BIO = /Mac/.test(navigator.platform) ? 'Touch ID' : /Win/.test(navigator.platform) ? 'Windows Hello' : null;
+
 function vLock() {
   const exists = hasVault();
   return `<section class="lock">
     <div class="logo glass">${ic(I.key)}</div>
     <h1>Связка</h1>
-    <p class="muted">${exists ? 'Введите мастер-пароль' : 'Придумайте мастер-пароль. Восстановить его нельзя — сохраните его в надёжном месте.'}</p>
+    <p class="muted" id="lock-hint">${exists ? (BIO ? `Приложите палец — ${BIO} — или введите мастер-пароль` : 'Введите мастер-пароль') : 'Придумайте мастер-пароль. Восстановить его нельзя — сохраните его в надёжном месте.'}</p>
+    ${exists && BIO ? `<button class="btn primary" data-act="bio">${ic(I.key)} Открыть с ${BIO}</button>` : ''}
     <form id="f-lock" class="glass card stack" autocomplete="off">
       <input type="password" name="pw" placeholder="Мастер-пароль" autocomplete="${exists ? 'current-password' : 'new-password'}" required>
       ${exists ? '' : '<input type="password" name="pw2" placeholder="Повторите пароль" autocomplete="new-password" required>'}
       <p class="err" hidden></p>
-      <button class="btn primary" type="submit">${exists ? 'Открыть' : 'Создать хранилище'}</button>
+      <button class="btn ${exists && BIO ? 'ghost' : 'primary'}" type="submit">${exists ? 'Открыть паролем' : 'Создать хранилище'}</button>
     </form>
     ${exists ? '' : `<button class="btn ghost" data-act="import">${ic(I.upload)} Восстановить из бэкапа</button>`}
     <p class="foot muted">${ic(I.shield)} Данные шифруются и хранятся только на этом устройстве</p>
@@ -681,7 +691,8 @@ function blankItem(sid, type) {
 function render() {
   if (!S) {
     app.innerHTML = vLock();
-    setTimeout(() => $('#f-lock input')?.focus(), 50);
+    if (hasVault() && BIO && !ui.bioTried) { ui.bioTried = true; setTimeout(tryBio, 150); }
+    else setTimeout(() => $('#f-lock input')?.focus(), 50);
     ui.lastHash = null;
     return;
   }
@@ -725,7 +736,7 @@ addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if ((k === 'f' || k === 'а') && $('#q')) { e.preventDefault(); $('#q').focus(); $('#q').select(); }
   else if (k === 'n' || k === 'т') { e.preventDefault(); const sh = (location.hash.match(/^#\/(?:shelf|item|edit)\/([^/]+)/) || [])[1]; const sid = location.hash.startsWith('#/shelf/') ? sh : sh && item(sh)?.shelfId; location.hash = '#/new/' + (sid || '-'); }
-  else if (k === 'l' || k === 'д') { e.preventDefault(); lock(); }
+  else if (k === 'l' || k === 'д') { e.preventDefault(); A.lock(); }
 });
 addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && S && isDesk() && !document.querySelector('.scrim')) {
@@ -824,9 +835,33 @@ function pickFile() {
 
 function lock() {
   document.querySelectorAll('.scrim').forEach((e) => e.remove());
+  ui.bioTried = true; // после блокировки не спрашиваем отпечаток сам — только по кнопке
   S = null;
   ui.q = '';
   render();
+}
+
+// Открыть сессию ключом, который отдал агент (после Touch ID / Windows Hello или проверки пароля)
+async function openRaw(r) {
+  await store.init();
+  const key = await importRaw(b64d(r.raw));
+  S = { key, salt: b64d(r.salt), iter: r.iter, data: await decryptWith(JSON.parse(store.get()), key) };
+}
+
+async function tryBio() {
+  const hint = $('#lock-hint');
+  const btn = $('[data-act="bio"]');
+  if (btn) btn.disabled = true;
+  if (hint) hint.textContent = `Ждём ${BIO}…`;
+  const r = await store.unlock().catch(() => ({ ok: false }));
+  if (r.ok) {
+    try { await openRaw(r); normalize(S.data); lastAct = Date.now(); render(); return; } catch {}
+  }
+  if (btn) btn.disabled = false;
+  if (hint) hint.textContent = r.code === 'NEED_PASSWORD'
+    ? `Первый раз — мастер-пароль. Дальше Связка будет открываться по ${BIO}.`
+    : r.code === 'DENIED' ? `${BIO} не подтверждён — попробуйте ещё раз или введите пароль` : 'Введите мастер-пароль';
+  $('#f-lock input')?.focus();
 }
 
 async function onLockSubmit(form) {
@@ -844,7 +879,9 @@ async function onLockSubmit(form) {
     }
     btn.disabled = true; btn.textContent = 'Открываю…';
     if (stored) {
-      try { S = await openVault(JSON.parse(stored), pw); } catch { throw new Error('Неверный пароль'); }
+      const r = await store.unlock(pw);
+      if (!r.ok) throw new Error(r.code === 'BAD_PASSWORD' ? 'Неверный пароль' : (r.error || 'Не удалось открыть'));
+      await openRaw(r);
     } else {
       const salt = rand(16);
       S = { key: await deriveKey(pw, salt, ITER), salt, iter: ITER, data: newVault() };
@@ -1011,7 +1048,8 @@ async function importPlain(src) {
 }
 
 const A = {
-  lock,
+  lock: () => { store.lockAgent(); lock(); },
+  bio: () => tryBio(),
   import: importBackup,
   export: exportBackup,
   copy: (el) => { const v = item(el.dataset.id)?.f[el.dataset.k]; if (v) copyText(v); },
