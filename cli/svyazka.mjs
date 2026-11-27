@@ -195,11 +195,16 @@ function runAgent() {
   }
 
   // Значения полей из запроса: обычные строки, {ask:1} — спросить в окне, {gen:N} — сгенерировать.
-  function materialize(type, title, fields) {
+  // Человеческие названия полей для окна ввода
+  const FIELD_LABEL = { value: 'значение токена (ключ, токен, ссылку или содержимое .env)', password: 'пароль', privateKey: 'приватный SSH-ключ',
+    passphrase: 'пароль (passphrase) от SSH-ключа', login: 'логин', text: 'текст заметки', url: 'адрес' };
+
+  function materialize(type, title, fields, ctx = {}) {
     const out = {};
     for (const [k, v] of Object.entries(fields || {})) {
       if (v && typeof v === 'object' && v.ask) {
-        const x = prompt('field:' + k, `Введите «${k}» для «${title}»:`);
+        const x = prompt('field:' + k, `${ctx.who || 'Агент'} сохраняет в Связку запись «${title}»${ctx.shelf ? ` (полка «${ctx.shelf}»)` : ''}.\n\n`
+          + `Вставьте сюда ${FIELD_LABEL[k] || k}. Агент значение не увидит — оно сразу шифруется.`);
         if (x == null) fail('Отменено');
         out[k] = x;
       } else if (v && typeof v === 'object' && v.gen) out[k] = genPassword(v.gen);
@@ -367,7 +372,7 @@ function runAgent() {
       if (st.data.items.some((i) => i.shelfId === s.id && i.type === type && i.title.toLowerCase() === title.toLowerCase())) {
         fail(`На полке «${s.name}» уже есть «${title}». Изменить: svyazka set "${s.name}/${title}" …`);
       }
-      const f = materialize(type, title, fields);
+      const f = materialize(type, title, fields, { who: who(c), shelf: s.name });
       if (type === 'payment') Object.assign(f, { currency: f.currency || st.data.settings.currency, period: f.period ?? 1, remind: f.remind ?? 7 });
       const now = Date.now();
       const it = { id: core.uid(), shelfId: s.id, type, title, f, created: now, updated: now };
@@ -379,7 +384,7 @@ function runAgent() {
     async set({ ref, fields, title, shelf }, c) {
       await ensureUnlocked(`${who(c)} меняет запись «${ref}».`);
       const it = resolve(ref);
-      Object.assign(it.f, materialize(it.type, it.title, fields));
+      Object.assign(it.f, materialize(it.type, it.title, fields, { who: who(c), shelf: shelfName(it.shelfId) }));
       if (title) it.title = title;
       if (shelf) it.shelfId = findShelf(shelf, true).id;
       it.updated = Date.now();

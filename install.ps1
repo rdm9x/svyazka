@@ -43,14 +43,19 @@ if (-not (($userPath -split ';') -contains $Bin)) {
 $env:Path = "$env:Path;$Bin"
 
 # ярлык в меню «Пуск»
-$lnk = Join-Path ([Environment]::GetFolderPath('Programs')) 'Связка.lnk'
+# WScript.Shell не сохраняет ярлык с не-ASCII именем — сохраняем как Svyazka.lnk и переименовываем
+$programs = [Environment]::GetFolderPath('Programs')
+$lnk = Join-Path $programs 'Связка.lnk'
+$tmpLnk = Join-Path $programs 'Svyazka.lnk'
 $sh = New-Object -ComObject WScript.Shell
-$s = $sh.CreateShortcut($lnk)
+$s = $sh.CreateShortcut($tmpLnk)
 $s.TargetPath = Join-Path $env:WINDIR 'System32\wscript.exe'
 $s.Arguments = '"' + (Join-Path $App 'cli\win\svyazka-ui.vbs') + '"'
 $s.IconLocation = (Join-Path $App 'icons\icon.ico') + ',0'
 $s.Description = 'Связка — ключница для людей и ИИ-агентов'
 $s.Save()
+if (Test-Path -LiteralPath $lnk) { Remove-Item -LiteralPath $lnk -Force }
+Move-Item -LiteralPath $tmpLnk -Destination $lnk
 Ok 'ярлык «Связка» — в меню «Пуск» (можно закрепить на панели задач)'
 
 # навык для Claude Code и Codex (копия: симлинки на Windows требуют прав)
