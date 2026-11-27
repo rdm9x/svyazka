@@ -1,4 +1,4 @@
-// node --test — команда svyazka целиком (агент, секреты, подтверждения, без GUI). Только macOS.
+// node --test — команда svyazka целиком (агент, секреты, подтверждения, без GUI). macOS, Windows, Linux.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -9,13 +9,14 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'cli', 'svyazka.mjs');
-const mac = process.platform === 'darwin';
+const win = process.platform === 'win32';
 
 function sandbox(extra = {}) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-'));
   const env = { ...process.env, SVYAZKA_HOME: home, SVYAZKA_SYNC_DIR: path.join(home, 'sync'), SVYAZKA_TEST: '1',
     SVYAZKA_TEST_PASSWORD: 'test-pass-123', SVYAZKA_TEST_CONFIRM: '1', ...extra };
   delete env.CLAUDECODE;
+  for (const k of Object.keys(env)) if (k.startsWith('CODEX_')) delete env[k];
   const run = (args, opts = {}) => {
     const e = Object.fromEntries(Object.entries({ ...env, ...(opts.env || {}) }).filter(([, v]) => v !== undefined));
     return spawnSync(process.execPath, [CLI, ...args], { env: e, input: opts.input, encoding: 'utf8' });
@@ -24,7 +25,7 @@ function sandbox(extra = {}) {
   return { home, run, stop };
 }
 
-test('создать, добавить, найти, показать — без секретов в выводе', { skip: !mac }, (t) => {
+test('создать, добавить, найти, показать — без секретов в выводе', (t) => {
   const s = sandbox(); t.after(s.stop);
   assert.equal(s.run(['init']).status, 0);
   let r = s.run(['add', 'password', 'Панель', '--shelf', 'VPS', '--login', 'admin', '--password', 'gen']);
@@ -38,7 +39,7 @@ test('создать, добавить, найти, показать — без 
   assert.match(s.run(['show', 'Панель']).stdout, /секреты \(скрыты\): password/);
 });
 
-test('секрет текстом в аргументах запрещён', { skip: !mac }, (t) => {
+test('секрет текстом в аргументах запрещён', (t) => {
   const s = sandbox(); t.after(s.stop);
   s.run(['init']);
   const r = s.run(['add', 'password', 'X', '--password', 'hunter2']);
@@ -46,17 +47,17 @@ test('секрет текстом в аргументах запрещён', { s
   assert.match(r.stderr, /не передаётся текстом/);
 });
 
-test('run: секреты в окружении, в выводе •••', { skip: !mac }, (t) => {
+test('run: секреты в окружении, в выводе •••', (t) => {
   const s = sandbox(); t.after(s.stop);
   s.run(['init']);
   s.run(['add', 'token', 'env', '--shelf', 'P', '--value', '-'], { input: 'DB_PASS=SuperSecret42\n' });
-  const r = s.run(['run', 'env', '--', 'sh', '-c', 'echo "db=$DB_PASS len=${#DB_PASS}"']);
+  const r = s.run(['run', 'env', '--', process.execPath, '-e', 'console.log("db=" + process.env.DB_PASS + " len=" + process.env.DB_PASS.length)']);
   assert.equal(r.status, 0, r.stderr);
   assert.equal(r.stdout.trim(), 'db=••• len=13');
-  assert.equal(s.run(['run', 'env', '--', 'sh', '-c', 'exit 7']).status, 7, 'код выхода сохраняется');
+  assert.equal(s.run(['run', 'env', '--', process.execPath, '-e', 'process.exit(7)']).status, 7, 'код выхода сохраняется');
 });
 
-test('get: только с подтверждением; журнал пишется', { skip: !mac }, (t) => {
+test('get: только с подтверждением; журнал пишется', (t) => {
   const s = sandbox(); t.after(s.stop);
   s.run(['init']);
   s.run(['add', 'token', 'tok', '--value', '-'], { input: 'abc-secret-777' });
@@ -70,16 +71,16 @@ test('get: только с подтверждением; журнал пишет
   assert.doesNotMatch(log, /abc-secret-777/);
 });
 
-test('без GUI и без терминала — понятная ошибка вместо зависания', { skip: !mac }, (t) => {
+test('без GUI и без терминала — понятная ошибка вместо зависания', (t) => {
   const s = sandbox({ SVYAZKA_NO_GUI: '1' }); t.after(s.stop);
   s.run(['init']);
   s.run(['stop']);
   const r = s.run(['ls'], { env: { SVYAZKA_TEST_PASSWORD: undefined } });
   assert.notEqual(r.status, 0);
-  assert.match(r.stderr, /окна macOS недоступны/);
+  assert.match(r.stderr, /окна недоступны/);
 });
 
-test('без GUI: пароль из терминала передаётся агенту ответом', { skip: !mac }, async (t) => {
+test('без GUI: пароль из терминала передаётся агенту ответом', { skip: win && 'на Windows агент слушает порт с ключом доступа' }, async (t) => {
   const s = sandbox({ SVYAZKA_NO_GUI: '1' }); t.after(s.stop);
   s.run(['init']);
   s.run(['stop']);
@@ -102,7 +103,7 @@ test('без GUI: пароль из терминала передаётся аг
   assert.equal(ok.ok, true);
 });
 
-test('sync: бэкап в папку и слияние с другого компьютера', { skip: !mac }, (t) => {
+test('sync: бэкап в папку и слияние с другого компьютера', (t) => {
   const a = sandbox(); t.after(a.stop);
   const b = sandbox({ SVYAZKA_SYNC_DIR: path.join(a.home, 'sync') }); t.after(b.stop);
   a.run(['init']);
@@ -116,4 +117,21 @@ test('sync: бэкап в папку и слияние с другого ком�
   fs.copyFileSync(path.join(b.home, 'vault.json'), path.join(a.home, 'sync', 'svyazka-B.json'));
   assert.equal(a.run(['sync']).status, 0);
   assert.match(a.run(['find', 'компьютера']).stdout, /с компьютера B/);
+});
+
+test('Windows: агент не отвечает без ключа доступа', { skip: !win && 'только Windows' }, async (t) => {
+  const s = sandbox(); t.after(s.stop);
+  s.run(['init']);
+  const a = JSON.parse(fs.readFileSync(path.join(s.home, 'agent.json'), 'utf8'));
+  assert.ok(a.port && a.token);
+  const ask = (token) => new Promise((res) => {
+    const c = net.createConnection({ port: a.port, host: '127.0.0.1' });
+    let buf = '';
+    c.on('data', (d) => { buf += d; });
+    c.on('close', () => res(buf));
+    c.on('error', () => res(''));
+    c.write(JSON.stringify({ op: 'status', args: {}, caller: 'терминал', token }) + '\n');
+  });
+  assert.equal(await ask('wrong'), '');
+  assert.match(await ask(a.token), /"ok":true/);
 });

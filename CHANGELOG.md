@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.0 — 2026-11-27
+
+- **Windows support**: `install.ps1`, `svyazka` command, Start-menu shortcut (Edge app window), Windows Hello for
+  `get` / `copy` / `rm`, Windows dialogs and clipboard, OpenSSH agent for `svyazka ssh`. The agent talks over
+  `127.0.0.1` with a per-run token.
+- **Linux support** (CLI): terminal prompts or `zenity` dialogs, `wl-copy` / `xclip`, `svyazka ui` in the browser.
+- `svyazka sync` defaults to OneDrive on Windows.
+- Shortcut hints in the UI follow the platform (⌘ / Ctrl).
+- CI runs the full test suite and installer smoke tests on macOS, Windows and Linux.
+
 ## 1.2.0 — 2026-11-27
 
 First public release.
@@ -17,7 +27,6 @@ First public release.
 ## Planned
 
 - English interface.
-- Linux CLI (terminal / pinentry prompts, `wl-copy` / `xclip`).
 - MCP server (`svyazka mcp`) for Cursor, Gemini CLI, Claude Desktop and other agents.
 - Import from Bitwarden, 1Password, KeePassXC, browser exports; export back.
 - TOTP (2FA) codes; macOS notifications for upcoming payments; Homebrew tap.

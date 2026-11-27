@@ -3,7 +3,7 @@
 import { ITER, uid, rand, deriveKey, seal, openVault, decryptWith, newVault, normalize, mergeData, tombstone, isVaultBlob, isPlainImport,
   addMonths, todayISO, markPaid, planPlainImport } from './core.js';
 
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 
 const $ = (s, r = document) => r.querySelector(s);
 const app = $('#app');
@@ -590,6 +590,7 @@ function vSettings() {
 /* ───────────── десктоп: три колонки ───────────── */
 
 const DESK_MQ = matchMedia('(min-width: 900px)');
+const MOD = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
 const isDesk = () => DESK_MQ.matches;
 
 function placeholder(text) {
@@ -603,7 +604,7 @@ function vSide(selShelf, nav) {
   const badge = urgent.length ? `<b class="badge ${overdue ? '' : 'amber'}">${urgent.length}</b>` : '';
   return `<aside class="side">
     <div class="brand"><span class="logo-s">${ic(I.key)}</span><b>Связка</b></div>
-    <label class="search glass">${ic(I.search)}<input id="q" type="search" placeholder="Поиск   ⌘F" value="${esc(ui.q)}" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <label class="search glass">${ic(I.search)}<input id="q" type="search" placeholder="Поиск   ${MOD}F" value="${esc(ui.q)}" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
     <nav class="snav">
       <a class="sn ${nav === 'home' ? 'on' : ''}" href="#/">${ic(I.clock)}<span>Обзор</span>${badge}</a>
       <a class="sn ${nav === 'payments' ? 'on' : ''}" href="#/payments">${ic(I.card)}<span>Платежи</span></a>
@@ -617,7 +618,7 @@ function vSide(selShelf, nav) {
       <button class="icon-btn" data-act="theme-cycle" title="Тема: ${THEMES.find((x) => x[0] === th)[1]}">${ic(I[th === 'auto' ? 'auto' : th === 'light' ? 'sun' : 'moon'])}</button>
       <a class="icon-btn ${nav === 'settings' ? 'on' : ''}" href="#/settings" title="Настройки">${ic(I.sliders)}</a>
       <span class="grow"></span>
-      <button class="icon-btn" data-act="lock" title="Заблокировать (⌘L)">${ic(I.lock)}</button>
+      <button class="icon-btn" data-act="lock" title="Заблокировать (${MOD}L)">${ic(I.lock)}</button>
     </div>
   </aside>`;
 }
@@ -627,14 +628,14 @@ function midShelf(s) {
   return `<header class="mhead">
       <i class="hdot" style="--c:${esc(s.color)}"></i><h2>${esc(s.name)}</h2><span class="cnt">${items.length}</span>
       <a class="mini" href="#/shelfedit/${s.id}" title="Изменить полку">${ic(I.edit)}</a>
-      <a class="btn-add" href="#/new/${s.id}" title="Новая запись (⌘N)">${ic(I.plus)}Добавить</a>
+      <a class="btn-add" href="#/new/${s.id}" title="Новая запись (${MOD}N)">${ic(I.plus)}Добавить</a>
     </header>
     ${items.length ? `<div class="glass list">${items.map((i) => row(i, false, true)).join('')}</div>`
       : `<div class="glass card empty">Пока пусто.<br>Добавьте пароль, SSH-ключ или оплату.</div>`}`;
 }
 
 function midHome() {
-  return `<header class="mhead"><h2>Обзор</h2><a class="btn-add" href="#/new" title="Новая запись (⌘N)">${ic(I.plus)}Добавить</a></header>${homeBody(true)}`;
+  return `<header class="mhead"><h2>Обзор</h2><a class="btn-add" href="#/new" title="Новая запись (${MOD}N)">${ic(I.plus)}Добавить</a></header>${homeBody(true)}`;
 }
 
 function midSearch() {
@@ -1151,6 +1152,6 @@ if (!store.ready) {
   app.innerHTML = `<section class="lock"><div class="glass card stack"><b>Откройте Связку через приложение</b><p class="muted">Эта страница работает только из приложения «Связка» или команды <code>svyazka ui</code>.</p></div></section>`;
 } else {
   store.init().then(render, (e) => {
-    app.innerHTML = `<section class="lock"><div class="glass card stack"><b>Связка не отвечает</b><p class="muted">${esc(e.message)}. Обновите окно (⌘R) или запустите: svyazka ui</p></div></section>`;
+    app.innerHTML = `<section class="lock"><div class="glass card stack"><b>Связка не отвечает</b><p class="muted">${esc(e.message)}. Обновите окно (${MOD}R) или запустите: svyazka ui</p></div></section>`;
   });
 }

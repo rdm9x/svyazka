@@ -1,12 +1,12 @@
 {
   "name": "svyazka",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
-  "description": "Local encrypted keyring for macOS that AI coding agents (Claude Code, Codex) can use without seeing your secrets",
+  "description": "Local encrypted keyring (macOS, Windows, Linux) that AI coding agents (Claude Code, Codex) can use without seeing your secrets",
   "type": "module",
   "license": "MIT",
   "engines": { "node": ">=20" },
-  "os": ["darwin"],
+  "os": ["darwin", "win32", "linux"],
   "bin": { "svyazka": "cli/svyazka.mjs" },
   "scripts": {
     "test": "node --test 'test/*.test.mjs'",

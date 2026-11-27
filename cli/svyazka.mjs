@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// svyazka — Связка на Mac.
+// svyazka — Связка: локальная ключница для людей и ИИ-агентов (macOS, Windows, Linux).
 // Агент держит ключ в памяти (как ssh-agent). Команды пользуются секретами, не показывая их;
-// показать значение можно только после Touch ID. Всё пишется в журнал ~/.svyazka/audit.log.
+// показать значение можно только после Touch ID / Windows Hello. Всё пишется в журнал ~/.svyazka/audit.log.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,10 +13,13 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import * as core from '../core.js';
+import * as sys from './platform.mjs';
 
 const HOME = os.homedir();
 const DIR = process.env.SVYAZKA_HOME || path.join(HOME, '.svyazka');
 const VAULT = path.join(DIR, 'vault.json');
+// Связь с агентом: Unix-сокет (macOS, Linux) или локальный порт + ключ доступа в файле профиля (Windows)
+const AGENT_FILE = path.join(DIR, 'agent.json');
 const SOCK = (() => {
   const p = path.join(DIR, 'agent.sock');
   if (Buffer.byteLength(p) < 100) return p;
@@ -29,10 +32,8 @@ const LOG = path.join(DIR, 'audit.log');
 const STATE = path.join(DIR, 'state.json');
 const TOUCHID = path.join(DIR, 'bin', 'svyazka-touchid');
 const CONFIG = path.join(DIR, 'config.json');
-const ICLOUD_ROOT = path.join(HOME, 'Library/Mobile Documents/com~apple~CloudDocs');
-// Папка для бэкапа и обмена между компьютерами: настройка → переменная → iCloud Drive/Связка → ~/Documents/Svyazka
-const syncDir = () => readJSON(CONFIG).syncDir || process.env.SVYAZKA_SYNC_DIR
-  || (fs.existsSync(ICLOUD_ROOT) ? path.join(ICLOUD_ROOT, 'Связка') : path.join(HOME, 'Documents', 'Svyazka'));
+// Папка для бэкапа и обмена между компьютерами: настройка → переменная → iCloud Drive / OneDrive → Документы
+const syncDir = () => readJSON(CONFIG).syncDir || process.env.SVYAZKA_SYNC_DIR || sys.defaultSyncDir(HOME);
 const HOST = os.hostname().replace(/\.local$/, '').replace(/[^\w.-]+/g, '-') || 'mac';
 const SCRIPT = fs.realpathSync(fileURLToPath(import.meta.url));
 const WEBROOT = path.resolve(path.dirname(SCRIPT), '..');
@@ -50,8 +51,7 @@ const fail = (m, code, extra) => { throw new UserError(m, code, extra); };
 
 // Ответы, которые клиент передал из терминала (когда окон macOS нет: вход по SSH и т. п.)
 const answers = new AsyncLocalStorage();
-const GUI = !process.env.SVYAZKA_NO_GUI && process.platform === 'darwin'
-  && (() => { try { return spawnSync('launchctl', ['managername'], { encoding: 'utf8' }).stdout.trim() === 'Aqua'; } catch { return false; } })();
+const GUI = sys.GUI;
 
 // Спросить у человека: тест → ответ из терминала → окно macOS → попросить клиента спросить в терминале
 function prompt(kind, text) {
@@ -59,15 +59,16 @@ function prompt(kind, text) {
   const ans = answers.getStore();
   if (ans && kind in ans) { const v = ans[kind]; delete ans[kind]; return v === '' || v == null ? null : v; }
   if (!GUI) fail('Нужен ввод в терминале', 'NEED_INPUT', { kind, text });
-  return dialogInput(text);
+  return sys.dialogInput(text);
 }
 
 /* ═════════════════════════ агент ═════════════════════════ */
 
+const AGENT_TOKEN = core.b64e(core.rand(24));
+
 function runAgent() {
   fs.mkdirSync(DIR, { recursive: true, mode: 0o700 });
-  fs.chmodSync(DIR, 0o700);
-  try { fs.unlinkSync(SOCK); } catch {}
+  if (!sys.WIN) { fs.chmodSync(DIR, 0o700); try { fs.unlinkSync(SOCK); } catch {} }
 
   const st = { key: null, salt: null, saltB64: null, iter: null, data: null, fileText: null, unlockedAt: 0, lastUse: 0 };
   let unlocking = null;
@@ -135,12 +136,10 @@ function runAgent() {
       fail('Не подтверждено');
     }
     if (GUI) {
-      if (fs.existsSync(TOUCHID)) {
-        const r = spawnSync(TOUCHID, [what], { stdio: 'ignore' });
-        if (r.status === 0) return;
-        if (r.status !== 2) fail('Не подтверждено Touch ID');
-      }
-      if (!dialogConfirm(what)) fail('Не подтверждено');
+      const v = sys.verifyUser(what, TOUCHID);
+      if (v === 'ok') return;
+      if (v === 'denied') fail(`Не подтверждено (${sys.VERIFY_NAME})`);
+      if (!sys.dialogConfirm(what)) fail('Не подтверждено');
       return;
     }
     // без окон: подтверждение мастер-паролем в терминале
@@ -245,9 +244,10 @@ function runAgent() {
 
   function sshAdd(it, sock) {
     if (!it.f.privateKey) return false;
-    if (!sock) fail('Нет SSH_AUTH_SOCK — ssh-agent не запущен');
+    if (!sock && !sys.WIN) fail('Нет SSH_AUTH_SOCK — ssh-agent не запущен');
     const key = it.f.privateKey.endsWith('\n') ? it.f.privateKey : it.f.privateKey + '\n';
-    const env = { ...process.env, SSH_AUTH_SOCK: sock };
+    const env = sock ? { ...process.env, SSH_AUTH_SOCK: sock } : { ...process.env };
+    if (sys.WIN) return sshAddWindows(it, key, env);
     if (it.f.passphrase) {
       // ssh-add спрашивает passphrase через SSH_ASKPASS — отдаём её из памяти агента
       const ask = path.join(DIR, 'askpass-' + process.pid + '.sh');
@@ -259,6 +259,27 @@ function runAgent() {
     } else {
       const r = spawnSync('ssh-add', ['-t', String(SSH_KEY_TTL), '-'], { input: key, env, encoding: 'utf8' });
       if (r.status !== 0) fail('ssh-add не принял ключ: ' + (r.stderr || '').trim());
+    }
+    return true;
+  }
+
+  // Windows: агент OpenSSH (служба ssh-agent). Срок жизни ключа он может не поддерживать — тогда убираем ключ сами.
+  function sshAddWindows(it, key, env) {
+    if (it.f.passphrase) fail('Ключи с passphrase на Windows пока не поддерживаются — уберите passphrase или используйте ключ без неё');
+    let r = spawnSync('ssh-add', ['-t', String(SSH_KEY_TTL), '-'], { input: key, env, encoding: 'utf8', windowsHide: true });
+    if (r.status !== 0 && /agent|connect|pipe/i.test(r.stderr || '') && !/lifetime|constrain/i.test(r.stderr || '')) {
+      fail('Не запущена служба ssh-agent. В PowerShell от администратора: Get-Service ssh-agent | Set-Service -StartupType Automatic; Start-Service ssh-agent');
+    }
+    if (r.status !== 0) {
+      r = spawnSync('ssh-add', ['-'], { input: key, env, encoding: 'utf8', windowsHide: true });
+      if (r.status !== 0) fail('ssh-add не принял ключ: ' + (r.stderr || '').trim());
+      if (it.f.publicKey) {
+        setTimeout(() => {
+          const pub = path.join(DIR, 'tmp-' + process.pid + '.pub');
+          try { fs.writeFileSync(pub, it.f.publicKey + '\n'); spawnSync('ssh-add', ['-d', pub], { env, windowsHide: true }); } catch {}
+          fs.rmSync(pub, { force: true });
+        }, SSH_KEY_TTL * 1000).unref();
+      }
     }
     return true;
   }
@@ -293,7 +314,7 @@ function runAgent() {
       };
     },
     async lock(a, c) { lockNow(); audit(c, 'lock'); return 'Связка заблокирована'; },
-    async stop(a, c) { lockNow(); audit(c, 'stop'); setTimeout(() => { try { fs.unlinkSync(SOCK); } catch {} process.exit(0); }, 50); return 'Агент остановлен'; },
+    async stop(a, c) { lockNow(); audit(c, 'stop'); setTimeout(cleanupExit, 50); return 'Агент остановлен'; },
     async unlock(a, c) { await ensureUnlocked(`${who(c)} просит открыть Связку.`); audit(c, 'unlock'); return `Открыто: ${st.data.items.length} записей, автоблокировка через ${IDLE_MIN} мин без использования`; },
 
     async init(a, c) {
@@ -392,9 +413,9 @@ function runAgent() {
       const k = field || (core.SECRET_FIELDS[it.type] || [])[0] || Object.keys(it.f)[0];
       if (!(k in it.f)) fail(`В «${it.title}» нет поля ${k}`);
       await confirmSecret(`скопировать «${it.title}» → ${k} (${who(c)})`);
-      spawnSync('pbcopy', { input: String(it.f[k]) });
+      if (!sys.clipboardSet(String(it.f[k]))) fail('Буфер обмена недоступен' + (sys.LINUX ? ' (нужен wl-copy или xclip)' : ''));
       clearTimeout(clipTimer);
-      clipTimer = setTimeout(() => spawnSync('pbcopy', { input: '' }), 30000);
+      clipTimer = setTimeout(() => sys.clipboardSet(''), 30000);
       audit(c, 'copy', label(it), k);
       return `Скопировано в буфер: ${label(it)} → ${k}. Очистится через 30 с.`;
     },
@@ -425,7 +446,10 @@ function runAgent() {
       const secrets = secretValues(its);
       const scrub = (s) => { for (const v of secrets) s = s.split(v).join('•••'); return s; };
       return await new Promise((res) => {
-        const child = spawn(cmd[0], cmd.slice(1), { cwd, env: { ...env, ...senv, SSH_AUTH_SOCK: sock || env.SSH_AUTH_SOCK }, stdio: ['ignore', 'pipe', 'pipe'] });
+        const fullEnv = { ...env, ...senv };
+        if (sock || env.SSH_AUTH_SOCK) fullEnv.SSH_AUTH_SOCK = sock || env.SSH_AUTH_SOCK;
+        const [bin, argv, extra] = sys.resolveSpawn(cmd[0], cmd.slice(1), fullEnv);
+        const child = spawn(bin, argv, { cwd, env: fullEnv, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, ...extra });
         const pipe = (stream, type) => {
           let buf = '';
           let t = null;
@@ -599,6 +623,7 @@ function runAgent() {
       buf = '';
       let req;
       try { req = JSON.parse(line); } catch { return conn.end(); }
+      if (sys.WIN && req.token !== AGENT_TOKEN) return conn.destroy();
       const op = ops[req.op];
       try {
         if (!op) fail('Неизвестная операция ' + req.op);
@@ -611,31 +636,20 @@ function runAgent() {
       conn.end();
     });
   });
-  server.listen(SOCK, () => fs.chmodSync(SOCK, 0o600));
-  const bye = () => { try { fs.unlinkSync(SOCK); } catch {} process.exit(0); };
-  process.on('SIGTERM', bye);
-  process.on('SIGINT', bye);
+  if (sys.WIN) {
+    server.listen(0, '127.0.0.1', () => writeJSON(AGENT_FILE, { port: server.address().port, token: AGENT_TOKEN, pid: process.pid }));
+  } else {
+    server.listen(SOCK, () => fs.chmodSync(SOCK, 0o600));
+  }
+  function cleanupExit() {
+    try { sys.WIN ? fs.unlinkSync(AGENT_FILE) : fs.unlinkSync(SOCK); } catch {}
+    process.exit(0);
+  }
+  process.on('SIGTERM', cleanupExit);
+  process.on('SIGINT', cleanupExit);
 }
 
 function send(conn, msg) { if (!conn.destroyed) conn.write(JSON.stringify(msg) + '\n'); }
-
-/* ═════════════════════ диалоги macOS ═════════════════════ */
-
-const asq = (s) => '"' + String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
-
-function dialogInput(text, title = 'Связка') {
-  const script = `text returned of (display dialog ${asq(text)} with title ${asq(title)} default answer "" with hidden answer buttons {"Отмена", "OK"} default button "OK" cancel button "Отмена" with icon caution giving up after 180)`;
-  const r = spawnSync('osascript', ['-e', script], { encoding: 'utf8' });
-  if (r.status !== 0) return null;
-  const v = r.stdout.replace(/\n$/, '');
-  return v === '' ? null : v;
-}
-function dialogConfirm(text) {
-  if (TEST && process.env.SVYAZKA_TEST_CONFIRM != null) return process.env.SVYAZKA_TEST_CONFIRM === '1';
-  const script = `button returned of (display dialog ${asq('Разрешить: ' + text + '?')} with title "Связка" buttons {"Запретить", "Разрешить"} default button "Запретить" cancel button "Запретить" with icon caution giving up after 120)`;
-  const r = spawnSync('osascript', ['-e', script], { encoding: 'utf8' });
-  return r.status === 0 && r.stdout.trim() === 'Разрешить';
-}
 
 function genPassword(n = 24) {
   const cs = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*-_=+?';
@@ -654,24 +668,22 @@ const writeJSON = (p, v) => fs.writeFileSync(p, JSON.stringify(v, null, 1), { mo
 const caller = (() => {
   if (process.env.CLAUDECODE) return 'Claude';
   if (Object.keys(process.env).some((k) => k.startsWith('CODEX_'))) return 'Codex';
-  try {
-    const rows = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,comm='], { encoding: 'utf8' }).stdout.trim().split('\n');
-    const procs = new Map(rows.map((r) => { const m = r.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/); return m ? [+m[1], { ppid: +m[2], comm: m[3] }] : [0, null]; }));
-    for (let pid = process.ppid, i = 0; pid > 1 && i < 12; i++) {
-      const pr = procs.get(pid);
-      if (!pr) break;
-      const name = path.basename(pr.comm).toLowerCase();
-      if (name.includes('codex')) return 'Codex';
-      if (name === 'claude' || name.includes('claude code')) return 'Claude';
-      pid = pr.ppid;
-    }
-  } catch {}
+  for (const name of sys.parentNames()) {
+    if (name.includes('codex')) return 'Codex';
+    if (name === 'claude' || name.includes('claude code')) return 'Claude';
+  }
   return 'терминал';
 })();
 
 function connect() {
   return new Promise((res, rej) => {
-    const c = net.createConnection(SOCK);
+    let c;
+    if (sys.WIN) {
+      const a = readJSON(AGENT_FILE);
+      if (!a.port) return rej(new Error('агент не запущен'));
+      c = net.createConnection({ port: a.port, host: '127.0.0.1' });
+      c.token = a.token;
+    } else c = net.createConnection(SOCK);
     c.once('connect', () => res(c));
     c.once('error', rej);
   });
@@ -679,7 +691,7 @@ function connect() {
 async function ensureAgent() {
   try { return await connect(); } catch {}
   fs.mkdirSync(DIR, { recursive: true, mode: 0o700 });
-  const child = spawn(process.execPath, [SCRIPT, '__agent'], { detached: true, stdio: 'ignore', env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'CLAUDECODE' && !k.startsWith('CODEX_'))) });
+  const child = spawn(process.execPath, [SCRIPT, '__agent'], { detached: true, stdio: 'ignore', windowsHide: true, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'CLAUDECODE' && !k.startsWith('CODEX_'))) });
   child.unref();
   for (let i = 0; i < 100; i++) {
     await new Promise((r) => setTimeout(r, 50));
@@ -715,7 +727,7 @@ async function callOnce(op, args, ans) {
     });
     c.on('error', rej);
     c.on('close', () => rej(new UserError('Агент оборвал соединение')));
-    c.write(JSON.stringify({ op, args, caller, answers: ans }) + '\n');
+    c.write(JSON.stringify({ op, args, caller, answers: ans, token: c.token }) + '\n');
   });
 }
 
@@ -728,7 +740,7 @@ async function call(op, args = {}) {
       const retry = e.code === 'NEED_INPUT' || (e.code === 'BAD_PASSWORD' && 'password' in ans);
       if (!retry || tries > 6) throw e;
       if (!process.stdin.isTTY) {
-        throw new UserError('Связка ждёт ввода пароля, а окна macOS недоступны и терминала нет.\n'
+        throw new UserError('Связка ждёт ввода пароля, а окна недоступны и терминала нет.\n'
           + 'Откройте её сами в терминале: svyazka unlock — и повторите команду.');
       }
       if (e.code === 'BAD_PASSWORD') { delete ans.password; process.stderr.write('Неверный мастер-пароль.\n'); }
@@ -789,7 +801,7 @@ const subtitle = (r) => {
   })[r.type] || '';
 };
 
-const HELP = `svyazka — Связка на Mac (секреты не показываются без Touch ID)
+const HELP = `svyazka — Связка: ключница для людей и ИИ-агентов (секреты не показываются без Touch ID / Windows Hello)
 
   svyazka status | unlock | lock | stop   состояние, открыть (окно с паролем), закрыть, остановить агент
   svyazka init                            создать пустое хранилище на Mac
@@ -801,17 +813,17 @@ const HELP = `svyazka — Связка на Mac (секреты не показ�
         типы: password ssh token payment note
         секреты: --password gen | --private-key @~/.ssh/key | --value - (stdin) | --passphrase ask (окно)
   svyazka set <запись> [--поле значение]... [--title Н] [--shelf П]
-  svyazka rm <запись>                     удалить (Touch ID)
+  svyazka rm <запись>                     удалить (Touch ID / Windows Hello)
   svyazka run <запись> [--ref <ещё>]... [--env ИМЯ=поле]... -- команда ...
         секреты попадают в переменные окружения команды; в выводе они заменяются на •••
         по умолчанию: SVYAZKA_LOGIN/PASSWORD/URL, SVYAZKA_TOKEN (+ строки KEY=VAL из токена),
         SVYAZKA_HOST/USER/PORT; ssh-ключи — в ssh-agent на 15 мин
   svyazka ssh <запись> [-- аргументы ssh]  подключиться ключом из Связки (ключ не пишется на диск)
   svyazka ssh-add <запись>                ключ в ssh-agent на 15 мин (для scp, rsync, git)
-  svyazka get <запись> [поле]             показать секрет (Touch ID)
-  svyazka copy <запись> [поле]            в буфер обмена на 30 с (Touch ID)
+  svyazka get <запись> [поле]             показать секрет (Touch ID / Windows Hello)
+  svyazka copy <запись> [поле]            в буфер обмена на 30 с (Touch ID / Windows Hello)
   svyazka pay | paid <запись>             платежи / отметить оплату
-  svyazka sync                            бэкап и обмен между компьютерами через папку (iCloud Drive и т. п.)
+  svyazka sync                            бэкап и обмен между компьютерами через папку (iCloud Drive, OneDrive…)
   svyazka config [sync-dir <папка>]       настройки: где лежат файлы, папка для sync
   svyazka ui                              открыть интерфейс Связки в браузере
   svyazka log [N]                         журнал действий
@@ -933,7 +945,7 @@ async function main() {
     case 'ui': {
       const r = await call('ui');
       if (args.includes('--print')) return console.log(r.url);
-      spawnSync('open', [r.url]);
+      sys.openUrl(r.url);
       return console.log('Интерфейс открыт в браузере (адрес работает только на этом Mac, пока запущен агент)');
     }
     case 'log': return console.log(await call('log', { n: +args[0] || 30 }));

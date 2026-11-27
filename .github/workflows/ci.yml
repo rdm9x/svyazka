@@ -9,14 +9,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
+        os: [macos-latest, ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Tests (core everywhere, CLI on macOS)
+      - name: Tests
+        shell: bash
         run: node --test 'test/*.test.mjs'
       - name: Build Touch ID helper and Связка.app
         if: runner.os == 'macOS'
@@ -26,3 +27,28 @@ jobs:
       - name: Package
         if: runner.os == 'macOS'
         run: ./pack.sh
+      - name: Install on Linux (install.sh) and smoke-test
+        if: runner.os == 'Linux'
+        run: |
+          sh install.sh
+          export PATH="$HOME/.local/bin:$PATH"
+          svyazka help | head -1
+          test -f "$HOME/.claude/skills/svyazka/SKILL.md"
+          grep -q 'svyazka:begin' "$HOME/.claude/CLAUDE.md"
+          export SVYAZKA_HOME=$(mktemp -d) SVYAZKA_TEST=1 SVYAZKA_TEST_PASSWORD=ci-pass-123 SVYAZKA_TEST_CONFIRM=1
+          svyazka init && svyazka add password CI --shelf Test --login ci --password gen && svyazka ls Test && svyazka stop
+      - name: Install on Windows (install.ps1) and smoke-test
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1
+          $env:Path = "$env:Path;$HOME\.svyazka\bin"
+          svyazka help | Select-Object -First 1
+          if (-not (Test-Path "$([Environment]::GetFolderPath('Programs'))\Связка.lnk")) { throw 'нет ярлыка' }
+          if (-not (Test-Path "$HOME\.claude\skills\svyazka\SKILL.md")) { throw 'нет навыка' }
+          if (-not (Select-String -Path "$HOME\.claude\CLAUDE.md" -Pattern 'svyazka:begin' -Quiet)) { throw 'нет правила' }
+          $env:SVYAZKA_HOME = Join-Path $env:TEMP 'sv-ci'; $env:SVYAZKA_TEST = '1'; $env:SVYAZKA_TEST_PASSWORD = 'ci-pass-123'; $env:SVYAZKA_TEST_CONFIRM = '1'
+          svyazka init
+          svyazka add password "CI" --shelf Test --login ci --password gen
+          svyazka ls Test
+          svyazka stop

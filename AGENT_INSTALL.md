@@ -1,7 +1,7 @@
 # Installing Svyazka — instructions for an AI agent (Claude Code, Codex, …)
 
-You are installing **Svyazka** for the user: a local encrypted keyring for macOS with a `svyazka` CLI, a desktop app and
-a skill for Claude Code and Codex. This folder is the unpacked release (or a clone of the repository).
+You are installing **Svyazka** for the user: a local encrypted keyring (macOS, Windows, Linux) with a `svyazka` CLI,
+a desktop app and a skill for Claude Code and Codex. This folder is the unpacked release (or a clone of the repository).
 
 **Talk to the user in their language** (the app's interface is Russian). Keep messages short and plain.
 
@@ -11,7 +11,8 @@ a skill for Claude Code and Codex. This folder is the unpacked release (or a clo
 ## 1. Explain and ask
 
 In one message tell the user what will happen and wait for a yes:
-- the app goes to `~/Applications/Связка.app`, the command to `~/.local/bin/svyazka`, files to `~/.svyazka`;
+- files go to `~/.svyazka`; the command to `~/.local/bin/svyazka` (Windows: `~\.svyazka\bin`, added to the user PATH);
+- the app: `~/Applications/Связка.app` on macOS, a «Связка» Start-menu shortcut on Windows, `svyazka ui` on Linux;
 - the `svyazka` skill is linked into `~/.claude/skills` (and `~/.codex/skills` if Codex is installed);
 - a short rule block is added to `~/.claude/CLAUDE.md` (and `~/.codex/AGENTS.md`) between
   `<!-- svyazka:begin/end -->` markers: “take credentials from Svyazka; save every new secret there immediately”.
@@ -20,17 +21,22 @@ In one message tell the user what will happen and wait for a yes:
 ## 2. Check requirements
 
 ```bash
-sw_vers -productVersion; node -v; xcrun --find swiftc
+node -v                                   # everywhere: 20+
+sw_vers -productVersion; xcrun --find swiftc   # macOS
 ```
-- macOS 13 or newer.
-- No Node.js or older than 20 → suggest `brew install node` (if Homebrew is present) or the installer from nodejs.org.
+- macOS 13 or newer; Windows 10/11; any Linux with a terminal.
+- No Node.js or older than 20 → suggest `brew install node` (macOS), `winget install OpenJS.NodeJS.LTS` (Windows),
+  the distro package or nodejs.org.
   Install only with the user's consent.
-- No `swiftc` → ask the user to run `xcode-select --install` and wait until it finishes (they do it themselves).
+- macOS without `swiftc` → ask the user to run `xcode-select --install` and wait until it finishes (they do it themselves).
+- Windows: `svyazka ssh` needs the OpenSSH client and the `ssh-agent` service — the installer tells if it's disabled;
+  enabling it needs an administrator PowerShell, so the user does it.
 
 ## 3. Install
 
 ```bash
-sh "<this folder>/install.sh"
+sh "<this folder>/install.sh"                                        # macOS, Linux
+powershell -ExecutionPolicy Bypass -File "<this folder>\install.ps1"   # Windows
 ```
 It copies Svyazka to `~/.svyazka/app`, builds the Touch ID helper and the app, links the skills and adds the rules.
 Re-running it updates an existing installation; the vault is never touched.
@@ -41,7 +47,7 @@ If it reports that `~/.local/bin` is not in `PATH`, add `export PATH="$HOME/.loc
 
 Ask whether the user has a Svyazka backup from another Mac:
 - **yes** → `svyazka import <file>` — a dialog asks for that backup's master password;
-- **no** → `svyazka init`. Warn first: a macOS dialog will appear; the password must be **at least 8 characters**,
+- **no** → `svyazka init`. Warn first: a dialog will appear (on Linux without `zenity` — a prompt in the terminal); the password must be **at least 8 characters**,
   a 3–4 word phrase is best, and **it cannot be recovered**. The command waits for input — tell the user to look at
   the screen. If it answers “Минимум 8 символов” or “Отменено”, don't retry silently — ask.
 
@@ -72,13 +78,13 @@ Ask whether to import the user's existing keys now. If yes:
 
 ```bash
 svyazka status; svyazka ls
-open ~/Applications/Связка.app
+svyazka ui        # or: open ~/Applications/Связка.app (macOS), Start menu → «Связка» (Windows)
 ```
-Tell the user in 4–6 lines: what was installed, where the app is (Spotlight → “Связка”), that in Claude Code and Codex
-it's now enough to ask “connect to …” / “save this key”, that `get` and `copy` need their Touch ID, that the audit
-log is `svyazka log`. Remind them about backups (`svyazka sync`, encrypted copy in iCloud Drive) and that the master
+Tell the user in 4–6 lines: what was installed, where the app is, that in Claude Code and Codex
+it's now enough to ask “connect to …” / “save this key”, that `get` and `copy` need their Touch ID / Windows Hello, that the audit
+log is `svyazka log`. Remind them about backups (`svyazka sync`, encrypted copy in iCloud Drive / OneDrive) and that the master
 password cannot be recovered.
 
 ## Updating
 
-New release → run its `install.sh`. The vault and data are untouched.
+New release → run its `install.sh` / `install.ps1`. The vault and data are untouched.
