@@ -22,5 +22,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          shasum -a 256 dist/*.zip > dist/SHA256SUMS.txt
+          (cd dist && shasum -a 256 *.zip > SHA256SUMS.txt)
           gh release create "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS.txt --title "Svyazka $GITHUB_REF_NAME" --notes-file <(sed -n "/^## ${GITHUB_REF_NAME#v}/,/^## /p" CHANGELOG.md | sed '$d')
