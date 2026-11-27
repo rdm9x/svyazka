@@ -1,0 +1,28 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tests (core everywhere, CLI on macOS)
+        run: node --test test/
+      - name: Build Touch ID helper and Связка.app
+        if: runner.os == 'macOS'
+        run: |
+          swiftc -O cli/touchid.swift -o "$RUNNER_TEMP/svyazka-touchid"
+          sh cli/build-app.sh
+      - name: Package
+        if: runner.os == 'macOS'
+        run: ./pack.sh

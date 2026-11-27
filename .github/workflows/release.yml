@@ -1,0 +1,26 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test test/
+      - name: Check version matches tag
+        run: |
+          VER=$(sed -n "s/^const VERSION = '\(.*\)';/\1/p" app.js)
+          [ "v$VER" = "$GITHUB_REF_NAME" ] || { echo "app.js VERSION=$VER, tag=$GITHUB_REF_NAME"; exit 1; }
+      - run: ./pack.sh
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shasum -a 256 dist/*.zip > dist/SHA256SUMS.txt
+          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS.txt --title "Svyazka $GITHUB_REF_NAME" --notes-file <(sed -n "/^## ${GITHUB_REF_NAME#v}/,/^## /p" CHANGELOG.md | sed '$d')
