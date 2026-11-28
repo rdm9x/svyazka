@@ -2,7 +2,7 @@
 #   команда svyazka, ярлык «Связка» в меню «Пуск», навык и правило для Claude Code и Codex.
 # Хранилище (%USERPROFILE%\.svyazka\vault.json) не трогается: повторный запуск = обновление.
 #
-#   irm https://github.com/rdm9x/keyhandoff/releases/latest/download/install.ps1 -OutFile $env:TEMP\svyazka-install.ps1
+#   irm https://github.com/rdm9x/keyhandoff/releases/latest/download/install.ps1 -OutFile $env:TEMP\keyhandoff-install.ps1
 #   powershell -ExecutionPolicy Bypass -File $env:TEMP\svyazka-install.ps1   # скачает релиз сам
 #   powershell -ExecutionPolicy Bypass -File install.ps1      # из распакованного релиза или клона
 #
@@ -122,12 +122,15 @@ Ok "$(M 'файлы Связки — в' 'Keyhandoff files →') $App"
 # команда svyazka
 # полный путь к node: ярлык и агенты запускают svyazka без вашего PATH; путь в профиле — через %USERPROFILE% (файл в ASCII)
 $nodeRef = if ($node.StartsWith($HOME, [StringComparison]::OrdinalIgnoreCase)) { '%USERPROFILE%' + $node.Substring($HOME.Length) } else { $node }
-Set-Content -Path (Join-Path $Bin 'svyazka.cmd') -Encoding ASCII -Value "@`"$nodeRef`" `"%USERPROFILE%\.svyazka\app\cli\svyazka.mjs`" %*"
+# keyhandoff, kh и svyazka — одна программа; svyazka остаётся навсегда (навык, правила, MCP-настройки)
+foreach ($name in 'svyazka', 'keyhandoff', 'kh') {
+  Set-Content -Path (Join-Path $Bin "$name.cmd") -Encoding ASCII -Value "@`"$nodeRef`" `"%USERPROFILE%\.svyazka\app\cli\svyazka.mjs`" %*"
+}
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 if (-not (($userPath -split ';') -contains $Bin)) {
   [Environment]::SetEnvironmentVariable('Path', ($(if ($userPath) { "$userPath;" } else { '' }) + $Bin), 'User')
-  Ok (M 'команда svyazka добавлена в PATH (откройте новый терминал)' 'svyazka command added to PATH (open a new terminal)')
-} else { Ok (M 'команда svyazka — в PATH' 'svyazka command is in PATH') }
+  Ok (M 'команды keyhandoff, kh и svyazka добавлены в PATH (откройте новый терминал)' 'keyhandoff, kh and svyazka commands added to PATH (open a new terminal)')
+} else { Ok (M 'команды keyhandoff, kh и svyazka — в PATH' 'keyhandoff, kh and svyazka commands are in PATH') }
 $env:Path = "$env:Path;$Bin"
 
 # ярлык в меню «Пуск»
@@ -173,4 +176,4 @@ elseif ($agentSvc.StartType -eq 'Disabled' -or $agentSvc.Status -ne 'Running') {
 }
 
 if (Test-Path (Join-Path $Dir 'vault.json')) { Ok (M 'хранилище уже есть — данные не тронуты' 'vault already exists — data untouched') }
-else { Write-Host ("`n" + (M 'Дальше: создать хранилище —  svyazka init   (или svyazka import <бэкап>)' 'Next: create the vault —  svyazka init   (or svyazka import <backup>)')) }
+else { Write-Host ("`n" + (M 'Дальше: создать хранилище —  keyhandoff init   (или keyhandoff import <бэкап>)' 'Next: create the vault —  keyhandoff init   (or keyhandoff import <backup>)')) }

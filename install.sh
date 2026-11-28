@@ -128,7 +128,7 @@ install_here() {
   SVYAZKA_NODE_BIN="$NODE" sh "$DEST/cli/install.sh" >/dev/null
   # обновление: прежний интерфейс был только русским — закрепляем его, пока язык не выбрали явно
   [ -f "$HOME/.svyazka/vault.json" ] && "$NODE" "$DEST/cli/svyazka.mjs" config lang "$IL" --if-unset >/dev/null 2>&1 || true
-  ok "$(m "команда svyazka" "svyazka command") → ~/.local/bin/svyazka"
+  ok "$(m "команды keyhandoff, kh, svyazka" "keyhandoff, kh, svyazka commands") → ~/.local/bin"
   ok "$(m "навык svyazka" "svyazka skill") → ~/.claude/skills$( [ -d "$HOME/.codex" ] && printf ' + ~/.codex/skills')"
 
   if [ "$OS" = "Darwin" ]; then
@@ -159,7 +159,7 @@ install_here() {
   if [ -f "$HOME/.svyazka/vault.json" ]; then
     ok "$(m "хранилище уже есть — данные не тронуты" "vault already exists — data untouched")"
   else
-    printf '\n%s\n' "$(m 'Дальше: создать хранилище —  svyazka init   (или svyazka import <бэкап>)' 'Next: create the vault —  svyazka init   (or svyazka import <backup>)')"
+    printf '\n%s\n' "$(m 'Дальше: создать хранилище —  keyhandoff init   (или keyhandoff import <бэкап>)' 'Next: create the vault —  keyhandoff init   (or keyhandoff import <backup>)')"
   fi
 }
 
