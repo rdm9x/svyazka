@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.0 — 2026-11-28
+
+- **Updates in one click**: `svyazka update` (and “Update Svyazka” in the menu bar key, which shows a dot when a new
+  version is out; checked once a day, `svyazka config update-check off` to disable). Releases are signed with the
+  author's Ed25519 key; an update whose signature doesn't match is refused. `svyazka status` mentions a new version.
+- The installer restarts the menu bar key after an update if it was running.
+- Installed before 2.0? Update once with the install line from the README; after that — `svyazka update`.
+
 ## 1.9.0 — 2026-11-28
 
 - **Key in the macOS menu bar**: blinks when an AI agent uses a key (lavender: command, SSH, reveal, copy) or saves

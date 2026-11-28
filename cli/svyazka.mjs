@@ -990,6 +990,15 @@ const subtitle = (r) => {
 };
 
 // Справка — по строке: каждая переводится целиком (вместе с выравниванием колонок)
+const appVersion = () => { try { return JSON.parse(fs.readFileSync(path.join(WEBROOT, 'package.json'), 'utf8')).version; } catch { return '0.0.0'; } };
+// подсказка в status: последняя проверка нашла новую версию
+function updateHint() {
+  const u = readJSON(STATE).update;
+  const cur = appVersion();
+  const nv = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i]; return false; };
+  return u?.latest && nv(u.latest, cur) ? '\n' + t('Доступна версия {0}: svyazka update', u.latest) : '';
+}
+
 const help = () => [
   t('svyazka — Связка: ключница для людей и ИИ-агентов (секреты не показываются без Touch ID / Windows Hello)'),
   '',
@@ -1019,6 +1028,7 @@ const help = () => [
   t('  svyazka config quick-unlock on|off      открывать Связку по Touch ID / Windows Hello (по умолчанию включено)'),
   t('  svyazka config lang ru|en|auto          язык сообщений (auto — как в системе)'),
   t('  svyazka ui                              открыть интерфейс Связки в браузере'),
+  t('  svyazka update [--check]                обновиться до последнего релиза (подпись автора проверяется)'),
   t('  svyazka mcp [config]                    MCP-сервер для Cursor, Claude Desktop, Gemini CLI; config — строка для их настроек'),
   t('  svyazka log [N]                         журнал действий'),
   '',
@@ -1037,11 +1047,12 @@ async function main() {
   switch (cmd) {
     case undefined: case 'help': case '-h': case '--help':
       return console.log(help());
-    case 'status': return out(await call('status'), (s) => console.log(
+    case 'status': return out(await call('status'), (s) => console.log((
       !s.exists ? t('Хранилища нет ({0}). Создать: svyazka init или svyazka import <бэкап>', s.vault)
         : s.unlocked ? t('Открыто: {0} на {1}, заблокируется через {2} мин без использования', nItems(s.items),
           i18n.plural(s.shelves, ['полке', 'полках', 'полках'], ['shelf', 'shelves']), s.lockInMin) + (s.ui ? '\n' + t('Интерфейс: открыт') : '')
-          : t('Заблокировано. Откроется само при первой команде (окно с паролем) или: svyazka unlock')));
+          : t('Заблокировано. Откроется само при первой команде (окно с паролем) или: svyazka unlock'))
+        + updateHint()));
     case 'stop':
       try { await connect().then((c) => c.destroy()); } catch { return console.log(t('Агент не запущен')); }
       return console.log(await call('stop'));
@@ -1171,6 +1182,13 @@ async function main() {
         }
         return console.log(on ? t('Открытие по {0}: включено (сработает после следующего ввода пароля)', sys.verifyName()) : t('Открытие по {0}: выключено, сохранённый ключ удалён', sys.verifyName()));
       }
+      if (args[0] === 'update-check') {
+        const on = { on: true, off: false }[args[1]];
+        if (on === undefined) fail('svyazka config update-check on|off');
+        fs.mkdirSync(DIR, { recursive: true, mode: 0o700 });
+        writeJSON(CONFIG, { ...readJSON(CONFIG), updateCheck: on });
+        return console.log(on ? t('Проверка обновлений: раз в день (значок в строке меню)') : t('Проверка обновлений выключена'));
+      }
       if (args[0] === 'lang') {
         const l = args[1];
         if (![...i18n.LANGS, 'auto'].includes(l)) fail('svyazka config lang ru|en|auto');
@@ -1182,7 +1200,7 @@ async function main() {
         writeJSON(CONFIG, cfg);
         return console.log(t('Язык: {0}', applyLang() === 'en' ? 'English' : 'русский'));
       }
-      if (args[0]) fail(t('svyazka config [sync-dir <папка> | quick-unlock on|off | lang ru|en|auto]'));
+      if (args[0]) fail(t('svyazka config [sync-dir <папка> | quick-unlock on|off | lang ru|en|auto | update-check on|off]'));
       const quick = readJSON(CONFIG).quickUnlock !== false && sys.QUICK;
       return out({ vault: VAULT, syncDir: syncDir(), log: LOG, app: WEBROOT, quickUnlock: quick }, (c) =>
         console.log(t('хранилище: {0}\nпапка sync: {1}\nжурнал:     {2}\nпрограмма:  {3}\nоткрытие по {4}: {5}', c.vault, c.syncDir, c.log, c.app, sys.verifyName(),
@@ -1193,6 +1211,32 @@ async function main() {
       if (args.includes('--print')) return console.log(r.url);
       sys.openUrl(r.url);
       return console.log(t('Интерфейс открыт в браузере (адрес работает только на этом компьютере, пока запущен агент)'));
+    }
+    case 'update': {
+      const up = await import('./update.mjs');
+      const version = appVersion();
+      const auto = args.includes('--auto'); // проверка по расписанию из значка в строке меню
+      if (auto && readJSON(CONFIG).updateCheck === false) return out({ current: version, disabled: true }, () => console.log(t('Проверка обновлений выключена')));
+      // адрес релизов и ключ меняются только в тестовом режиме (проверка на временной папке)
+      const opts = TEST && process.env.SVYAZKA_RELEASE_URL ? { base: process.env.SVYAZKA_RELEASE_URL, pubkey: process.env.SVYAZKA_UPDATE_PUBKEY } : {};
+      let rel;
+      try { rel = await up.latest({ ...opts, t }); }
+      catch (e) { fail(e.code === 'SIGNATURE' ? t('Подпись релиза не сходится — обновление отклонено. Сообщите автору Связки.') : t('Не удалось проверить обновления: {0}', e.message)); }
+      const available = up.newer(rel.version, version);
+      fs.mkdirSync(DIR, { recursive: true, mode: 0o700 });
+      writeJSON(STATE, { ...readJSON(STATE), update: { checked: Date.now(), latest: rel.version } });
+      if (args.includes('--check')) {
+        return out({ current: version, latest: rel.version, available }, () => console.log(available
+          ? t('Доступна версия {0} (у вас {1}). Обновить: svyazka update', rel.version, version)
+          : t('Установлена последняя версия: {0}', version)));
+      }
+      if (!available) return console.log(t('Установлена последняя версия: {0}', version));
+      if (path.resolve(WEBROOT) !== path.join(HOME, '.svyazka', 'app') && !TEST) {
+        fail(t('Связка установлена из клона git ({0}) — обновите её через git pull', WEBROOT));
+      }
+      console.log(t('Обновляю {0} → {1} (подпись релиза проверена)…', version, rel.version));
+      try { await up.install(rel, { lang: i18n.lang(), t }); } catch (e) { fail(e.message); }
+      return console.log(t('Готово: Связка {0}', rel.version));
     }
     case 'mcp': {
       const mcp = await import('./mcp.mjs');

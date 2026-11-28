@@ -107,6 +107,9 @@ install_here() {
 
   # остановить старую версию, если была
   [ -x "$HOME/.local/bin/svyazka" ] && "$HOME/.local/bin/svyazka" stop >/dev/null 2>&1 || true
+  # значок в строке меню был запущен — после установки запустим новый (без окна)
+  RELAUNCH=""
+  if [ "$OS" = "Darwin" ] && pgrep -f "$HOME/Applications/Связка.app/Contents/MacOS/Svyazka" >/dev/null 2>&1; then RELAUNCH=1; fi
   [ "$OS" = "Darwin" ] && pkill -f "$HOME/Applications/Связка.app/Contents/MacOS/Svyazka" 2>/dev/null || true
 
   if [ "$SRC" != "$DEST" ]; then
@@ -142,6 +145,7 @@ install_here() {
   fi
 
   SVYAZKA_LANG="$IL" "$NODE" "$DEST/cli/agent-rules.mjs" install
+  [ -n "$RELAUNCH" ] && [ -d "$HOME/Applications/Связка.app" ] && open -g -a "$HOME/Applications/Связка.app" --args --background || true
 
   case ":$PATH:" in
     *":$HOME/.local/bin:"*) ok "~/.local/bin $(m "в PATH" "is in PATH")" ;;

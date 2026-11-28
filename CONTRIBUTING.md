@@ -54,4 +54,5 @@ svyazka init && svyazka ui
 
 Bump `VERSION` in `app.js` and `version` in `package.json` (the app's bundle version is taken from `app.js`), add a
 `CHANGELOG.md` section, tag `vX.Y.Z`. The Release workflow builds the universal macOS helper and app into `prebuilt/`,
-packs the zip and publishes it with `install.sh`, `install.ps1` and `SHA256SUMS.txt`.
+packs the zip and publishes it with `install.sh`, `install.ps1`, `SHA256SUMS.txt` and its Ed25519 signature
+`SHA256SUMS.txt.sig` (secret `RELEASE_SIGNING_KEY`; public key `cli/release-key.pub` — `svyazka update` refuses unsigned releases).

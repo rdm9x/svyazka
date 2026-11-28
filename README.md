@@ -64,8 +64,11 @@ irm https://github.com/rdm9x/svyazka/releases/latest/download/install.ps1 -OutFi
 powershell -ExecutionPolicy Bypass -File $env:TEMP\svyazka-install.ps1
 ```
 
-Then create the vault: `svyazka init` (a dialog asks for the master password). Running the installer again updates
-Svyazka; the vault is never touched.
+Then create the vault: `svyazka init` (a dialog asks for the master password).
+
+**Updating:** `svyazka update` (on a Mac also the menu bar key → “Update Svyazka”, which appears when a new version is
+out). The release is checked against the author's Ed25519 signature before anything is installed; the vault is never
+touched. Versions before 2.0 update once by running the install line above again.
 
 **Or let your agent do it.** Download the latest [release](https://github.com/rdm9x/svyazka/releases), unzip, open Claude Code (or Codex) in the folder and say:
 
@@ -100,6 +103,7 @@ Open **Svyazka** from Spotlight (Mac) or the Start menu (Windows), or run `svyaz
 | `svyazka import <file>` | a Svyazka backup (merge), JSON in the [import format](IMPORT.md), or an export from Bitwarden, 1Password, KeePassXC, Chrome / Edge / Firefox / Safari |
 | `svyazka export <file>` | for another manager: `.json` (Bitwarden, all items) or `.csv` (passwords) — after Touch ID, unencrypted |
 | `svyazka log`, `status`, `lock` | audit log, state, lock now |
+| `svyazka update [--check]` | update to the latest signed release |
 | `svyazka mcp`, `mcp config` | MCP server for Cursor, Claude Desktop, Gemini CLI; the snippet for their settings |
 | `svyazka config lang en\|ru\|auto` | interface language (auto — by the system) |
 

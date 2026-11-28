@@ -94,4 +94,5 @@ password cannot be recovered.
 
 ## Updating
 
-New release → run its `install.sh` / `install.ps1`. The vault and data are untouched.
+`svyazka update` (2.0+): verifies the release signature, then installs over the old version; the vault and data are
+untouched. Older versions: run the new release's `install.sh` / `install.ps1` once.

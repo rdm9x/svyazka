@@ -21,7 +21,7 @@ const t = makeT({ en: EN });
   document.title = t('Связка');
 }
 
-const VERSION = '1.9.0';
+const VERSION = '2.0.0';
 
 const $ = (s, r = document) => r.querySelector(s);
 const app = $('#app');

@@ -65,8 +65,11 @@ irm https://github.com/rdm9x/svyazka/releases/latest/download/install.ps1 -OutFi
 powershell -ExecutionPolicy Bypass -File $env:TEMP\svyazka-install.ps1
 ```
 
-Потом создайте хранилище: `svyazka init` (откроется окно для мастер-пароля). Повторный запуск установщика обновляет
-Связку, хранилище не трогается.
+Потом создайте хранилище: `svyazka init` (откроется окно для мастер-пароля).
+
+**Обновление:** `svyazka update` (на Mac — ещё и ключ в строке меню → «Обновить Связку», пункт появляется, когда вышла
+новая версия). Перед установкой релиз сверяется с подписью автора (Ed25519); хранилище не трогается. Версии до 2.0
+обновляются один раз вручную — той же строкой установки.
 
 **Или поручите агенту.** Скачайте последний [релиз](https://github.com/rdm9x/svyazka/releases), распакуйте, откройте Claude Code (или Codex) в этой папке и напишите:
 
@@ -101,6 +104,7 @@ powershell -ExecutionPolicy Bypass -File $env:TEMP\svyazka-install.ps1
 | `svyazka import <файл>` | бэкап Связки (слияние), JSON в [формате импорта](IMPORT.md) или выгрузка из Bitwarden, 1Password, KeePassXC, Chrome / Edge / Firefox / Safari |
 | `svyazka export <файл>` | для другого менеджера: `.json` (Bitwarden, все записи) или `.csv` (пароли) — после Touch ID, без шифрования |
 | `svyazka log`, `status`, `lock` | журнал, состояние, закрыть сейчас |
+| `svyazka update [--check]` | обновиться до последнего подписанного релиза |
 | `svyazka mcp`, `mcp config` | MCP-сервер для Cursor, Claude Desktop, Gemini CLI; строка для их настроек |
 | `svyazka config lang ru\|en\|auto` | язык интерфейса (auto — по системе) |
 

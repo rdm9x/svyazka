@@ -14,6 +14,8 @@ final class MenuBar: NSObject, NSMenuDelegate {
   private var offset: UInt64 = 0
   private var events: [Event] = []
   private var blink: Timer?
+  private var update: String?      // доступная новая версия
+  private var updating = false
   private let open: () -> Void, lock: () -> Void
 
   private static let take: Set<String> = ["run", "ssh", "get", "copy"], put: Set<String> = ["add", "set"]
@@ -21,14 +23,61 @@ final class MenuBar: NSObject, NSMenuDelegate {
   init(open: @escaping () -> Void, lock: @escaping () -> Void) {
     self.open = open; self.lock = lock
     super.init()
-    item.button?.image = Self.keyImage(color: nil)
+    item.button?.image = Self.keyImage(color: nil, dot: false)
     item.button?.toolTip = L("Связка", "Svyazka")
     let menu = NSMenu()
     menu.delegate = self
     item.menu = menu
     readTail()
     Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.poll() }
+    // обновления: через минуту после запуска, дальше — раз в сутки
+    DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in self?.checkUpdate() }
+    Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in self?.checkUpdate() }
   }
+
+  // ── обновления: только сообщаем; ставится по клику ──
+
+  private func checkUpdate() {
+    let last = UserDefaults.standard.double(forKey: "updateChecked")
+    guard Date().timeIntervalSince1970 - last > 23 * 3600 else { return }
+    DispatchQueue.global(qos: .utility).async {
+      let r = AppDelegate.svyazka(["update", "--check", "--auto", "--json"])
+      guard let out = r.out, let d = out.data(using: .utf8),
+            let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return }
+      DispatchQueue.main.async {
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "updateChecked")
+        self.update = (j["available"] as? Bool) == true ? j["latest"] as? String : nil
+        self.item.button?.image = self.icon(nil)
+      }
+    }
+  }
+
+  @objc private func doUpdate() {
+    guard !updating else { return }
+    updating = true
+    self.item.button?.image = self.icon(nil)
+    // вывод — в файл, не в канал: установщик перезапустит Связку, а команда должна дожить до конца
+    let log = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".svyazka/update.log")
+    FileManager.default.createFile(atPath: log.path, contents: nil)
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: FileManager.default.homeDirectoryForCurrentUser.path + "/.local/bin/svyazka")
+    p.arguments = ["update"]
+    if let h = try? FileHandle(forWritingTo: log) { p.standardOutput = h; p.standardError = h }
+    p.terminationHandler = { pr in
+      DispatchQueue.main.async {
+        self.updating = false
+        guard pr.terminationStatus != 0 else { self.update = nil; self.item.button?.image = self.icon(nil); return }
+        let text = (try? String(contentsOf: log, encoding: .utf8)) ?? ""
+        let a = NSAlert()
+        a.messageText = L("Не удалось обновить Связку", "Couldn't update Svyazka")
+        a.informativeText = String(text.suffix(600))
+        a.runModal()
+      }
+    }
+    do { try p.run() } catch { updating = false }
+  }
+
+  private func icon(_ color: NSColor?) -> NSImage { Self.keyImage(color: color, dot: update != nil && !updating) }
 
   // ── журнал ──
 
@@ -93,15 +142,20 @@ final class MenuBar: NSObject, NSMenuDelegate {
     blink = Timer.scheduledTimer(withTimeInterval: 0.28, repeats: true) { [weak self] t in
       guard let self else { return }
       n += 1
-      self.item.button?.image = Self.keyImage(color: n % 2 == 1 ? color : nil)
-      if n >= 10 { t.invalidate(); self.item.button?.image = Self.keyImage(color: nil) }
+      self.item.button?.image = self.icon(n % 2 == 1 ? color : nil)
+      if n >= 10 { t.invalidate(); self.item.button?.image = self.icon(nil) }
     }
   }
 
   // Ключ по диагонали (геометрия — как в make-icon.swift): головка с отверстием, стержень, бородка из двух зубцов.
   // color == nil — шаблон: macOS сама красит в цвет строки меню.
-  static func keyImage(color: NSColor?) -> NSImage {
+  // dot — точка «есть обновление» в правом верхнем углу
+  static func keyImage(color: NSColor?, dot: Bool = false) -> NSImage {
     let img = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { _ in
+      if dot {
+        (color ?? .black).setFill()
+        NSBezierPath(ovalIn: NSRect(x: 13, y: 1, width: 4.5, height: 4.5)).fill()
+      }
       let u: CGFloat = 0.0335
       let t = NSAffineTransform()
       t.translateX(by: 9, yBy: 9); t.rotate(byDegrees: -45); t.translateX(by: -182.5 * u, yBy: 0)
@@ -125,6 +179,12 @@ final class MenuBar: NSObject, NSMenuDelegate {
 
   func menuNeedsUpdate(_ menu: NSMenu) {
     menu.removeAllItems()
+    if let v = update {
+      let u = menu.addItem(withTitle: updating ? L("Обновляется…", "Updating…") : L("Обновить Связку до \(v)", "Update Svyazka to \(v)"), action: updating ? nil : #selector(doUpdate), keyEquivalent: "")
+      u.target = self
+      u.isEnabled = !updating
+      menu.addItem(.separator())
+    }
     let head = menu.addItem(withTitle: L("Агенты и ключи", "Agents and keys"), action: nil, keyEquivalent: "")
     head.isEnabled = false
     if events.isEmpty {
@@ -146,6 +206,8 @@ final class MenuBar: NSObject, NSMenuDelegate {
     login.target = self
     login.state = LoginItem.enabled ? .on : .off
     menu.addItem(withTitle: L("Выйти из Связки", "Quit Svyazka"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+    let ver = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+    menu.addItem(withTitle: L("Связка", "Svyazka") + " " + ver, action: nil, keyEquivalent: "").isEnabled = false
   }
 
   @objc private func doOpen() { open() }

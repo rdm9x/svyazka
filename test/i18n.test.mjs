@@ -18,7 +18,7 @@ export function keys(file) {
   return out;
 }
 
-for (const [files, dict, name] of [[['cli/svyazka.mjs', 'cli/platform.mjs', 'cli/mcp.mjs', 'core.js'], EN_CLI, 'lang/en-cli.js'], [['app.js'], EN_APP, 'lang/en-app.js']]) {
+for (const [files, dict, name] of [[['cli/svyazka.mjs', 'cli/platform.mjs', 'cli/mcp.mjs', 'cli/update.mjs', 'core.js'], EN_CLI, 'lang/en-cli.js'], [['app.js'], EN_APP, 'lang/en-app.js']]) {
   test(`каждая строка t('…') переведена в ${name}`, () => {
     const missing = [...new Set(files.flatMap(keys))].filter((k) => !(k in dict));
     assert.deepEqual(missing, [], `нет перевода в ${name}`);
