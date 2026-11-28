@@ -21,7 +21,7 @@ const t = makeT({ en: EN });
   document.title = t('Связка');
 }
 
-const VERSION = '2.0.0';
+const VERSION = '2.0.1';
 
 const $ = (s, r = document) => r.querySelector(s);
 const app = $('#app');
@@ -309,7 +309,7 @@ function accessText(it) {
 
 function top(title, right = '', back = null, cls = '') {
   return `<header class="top ${cls}">
-    ${back ? `<a class="icon-btn glass" href="${back}" aria-label="${t('Назад')}">${ic(I.back)}</a>` : ''}
+    ${back ? `<a class="icon-btn glass back" href="${back}" aria-label="${t('Назад')}">${ic(I.back)}</a>` : ''}
     <h1>${title}</h1>
     <div class="top-actions">${right}</div>
   </header>`;

@@ -609,7 +609,7 @@ select {
 .desk .glass { border-radius: 14px; }
 .desk .card { padding: 14px; }
 .desk .stack { gap: 10px; }
-.desk .fab, .desk .top > a[aria-label="Назад"] { display: none; }
+.desk .fab, .desk .top > a.back { display: none; }
 .desk .top { min-height: 32px; margin-bottom: 8px; }
 .desk .top h1 { font-size: 17px; }
 .desk .icon-btn { width: 34px; height: 34px; }

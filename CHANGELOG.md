@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.1 — 2026-11-28
+
+- English interface: no stray “Back” button above an item in the three-column window.
+
 ## 2.0.0 — 2026-11-28
 
 - **Updates in one click**: `svyazka update` (and “Update Svyazka” in the menu bar key, which shows a dot when a new
