@@ -21,7 +21,7 @@ const t = makeT({ en: EN });
   document.title = t('Связка');
 }
 
-const VERSION = '1.8.1';
+const VERSION = '1.8.2';
 
 const $ = (s, r = document) => r.querySelector(s);
 const app = $('#app');
@@ -372,7 +372,7 @@ const BIO = /Mac/.test(navigator.platform) ? 'Touch ID' : /Win/.test(navigator.p
 function vLock() {
   const exists = hasVault();
   return `<section class="lock">
-    <div class="logo glass">${ic(I.key)}</div>
+    <img class="logo" src="icons/icon.svg" alt="">
     <h1>${t('Связка')}</h1>
     <p class="muted" id="lock-hint">${exists ? (BIO ? t('Приложите палец — {0} — или введите мастер-пароль', BIO) : t('Введите мастер-пароль')) : t('Придумайте мастер-пароль. Восстановить его нельзя — сохраните его в надёжном месте.')}</p>
     ${exists && BIO ? `<button class="btn primary" data-act="bio">${ic(I.key)} ${t('Открыть с {0}', BIO)}</button>` : ''}
@@ -646,7 +646,7 @@ function vSide(selShelf, nav) {
   const overdue = urgent.filter((x) => x.d.days < 0).length;
   const badge = urgent.length ? `<b class="badge ${overdue ? '' : 'amber'}">${urgent.length}</b>` : '';
   return `<aside class="side">
-    <div class="brand"><span class="logo-s">${ic(I.key)}</span><b>${t('Связка')}</b></div>
+    <div class="brand"><img class="logo-s" src="icons/icon.svg" alt=""><b>${t('Связка')}</b></div>
     <label class="search glass">${ic(I.search)}<input id="q" type="search" placeholder="${t('Поиск')}   ${MOD}F" value="${esc(ui.q)}" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
     <nav class="snav">
       <a class="sn ${nav === 'home' ? 'on' : ''}" href="#/">${ic(I.clock)}<span>${t('Обзор')}</span>${badge}</a>

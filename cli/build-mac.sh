@@ -32,7 +32,7 @@ build svyazka-touchid "$HERE/touchid.swift"
 build Svyazka "$HERE/mac-app/main.swift" -framework Cocoa -framework WebKit
 
 # иконка
-swift "$HERE/mac-app/make-icon.swift" "$ROOT/icons/icon-512.png" "$B/icon-1024.png"
+swift "$HERE/mac-app/make-icon.swift" "$B/icon-1024.png" 1024   # иконка macOS: поля и тень уже в рисунке
 mkdir "$B/AppIcon.iconset"
 for s in 16 32 128 256 512; do
   sips -z $s $s "$B/icon-1024.png" --out "$B/AppIcon.iconset/icon_${s}x${s}.png" >/dev/null

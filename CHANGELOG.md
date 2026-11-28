@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.2 — 2026-11-28
+
+- **New icon**: a classic key on a dark blue glass square — the Mac app, the Windows shortcut, the browser tab, and
+  the logo on the lock screen and in the sidebar. The icon is drawn by `cli/mac-app/make-icon.swift`;
+  `cli/make-icons.sh` rebuilds `icons/`.
+- New README screenshots.
+
 ## 1.8.1 — 2026-11-28
 
 Fixes after a full review:

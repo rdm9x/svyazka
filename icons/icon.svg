@@ -1,10 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a46d8"/><stop offset=".55" stop-color="#141838"/><stop offset="1" stop-color="#0a6c80"/></linearGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1a1d3d"/><stop offset=".55" stop-color="#0e1024"/><stop offset="1" stop-color="#0a1420"/></linearGradient>
+    <radialGradient id="g1" cx="102.4" cy="76.8" r="358.4" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#5b63e6" stop-opacity=".45"/><stop offset="1" stop-color="#5b63e6" stop-opacity="0"/></radialGradient>
+    <radialGradient id="g2" cx="460.8" cy="486.4" r="307.2" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1fb6c8" stop-opacity=".28"/><stop offset="1" stop-color="#1fb6c8" stop-opacity="0"/></radialGradient>
+    <linearGradient id="hl" x1="0" y1="0" x2="0" y2=".4"><stop offset="0" stop-color="#fff" stop-opacity=".1"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <linearGradient id="k" x1="93" y1="-168.1" x2="93" y2="168.1" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#b3b8ff"/><stop offset="1" stop-color="#3fc8e8"/></linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="10.2"/></filter>
+    <clipPath id="sq"><rect width="512" height="512" rx="115.2"/></clipPath>
   </defs>
-  <rect width="64" height="64" rx="15" fill="url(#g)"/>
-  <circle cx="32" cy="32" r="23" fill="#fff" fill-opacity=".1" stroke="#fff" stroke-opacity=".4"/>
-  <g transform="translate(14.5 14.5) scale(1.46)" fill="none" stroke="#f5f8ff" stroke-width="2.1" stroke-linecap="round">
-    <circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.3-9.3M17 6l3 3M14.5 8.5l2.5 2.5"/>
+  <g clip-path="url(#sq)">
+    <rect width="512" height="512" fill="url(#bg)"/>
+    <rect width="512" height="512" fill="url(#g1)"/>
+    <rect width="512" height="512" fill="url(#g2)"/>
+    <rect width="512" height="512" fill="url(#hl)"/>
+    <g transform="translate(256 256) rotate(-45) translate(-93 0)">
+      <g fill="#3fc8e8" opacity=".5" filter="url(#glow)"><path fill-rule="evenodd" d="M-63.7 0a63.7 63.7 0 1 0 127.4 0a63.7 63.7 0 1 0 -127.4 0zM-29.6 0a29.6 29.6 0 1 0 59.1 0a29.6 29.6 0 1 0 -59.1 0z"/><rect x="45.9" y="-13.2" width="203.8" height="26.5" rx="13.2"/><rect x="193.6" y="3.1" width="25.5" height="46.9" rx="6.1"/><rect x="226.7" y="3.1" width="22.9" height="33.6" rx="6.1"/></g>
+      <g fill="url(#k)" opacity=".92"><path fill-rule="evenodd" d="M-63.7 0a63.7 63.7 0 1 0 127.4 0a63.7 63.7 0 1 0 -127.4 0zM-29.6 0a29.6 29.6 0 1 0 59.1 0a29.6 29.6 0 1 0 -59.1 0z"/><rect x="45.9" y="-13.2" width="203.8" height="26.5" rx="13.2"/><rect x="193.6" y="3.1" width="25.5" height="46.9" rx="6.1"/><rect x="226.7" y="3.1" width="22.9" height="33.6" rx="6.1"/></g>
+    </g>
   </g>
 </svg>

@@ -15,7 +15,7 @@ end to end.
 | `cli/mcp.mjs` | `svyazka mcp` — MCP server (stdio) on top of the agent |
 | `cli/platform.mjs` | everything OS-specific: dialogs, Touch ID / Windows Hello, clipboard, opening the UI |
 | `cli/touchid.swift` | Touch ID confirmation helper |
-| `cli/mac-app/` | `Связка.app` (WebKit window) and its icon |
+| `cli/mac-app/` | `Связка.app` (WebKit window) and the icon generator `make-icon.swift` (`sh cli/make-icons.sh` rebuilds `icons/`) |
 | `cli/build-mac.sh` | compile the helper and the app (`ARCHS="arm64 x86_64"` — universal, as the release does) |
 | `cli/skill/SKILL.md` | the skill for Claude Code and Codex |
 | `cli/agent-rules.mjs` | the standing rule in `~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md` |
