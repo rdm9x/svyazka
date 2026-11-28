@@ -52,7 +52,8 @@ New-Item -ItemType Directory -Force -Path $Dir, $Bin | Out-Null
 
 function NodeOk($p) {
   if (-not $p -or -not (Test-Path -LiteralPath $p)) { return $false }
-  try { & $p -e 'process.exit(+process.versions.node.split(".")[0] >= 20 ? 0 : 1)' 2>$null; return $LASTEXITCODE -eq 0 } catch { return $false }
+  # по выводу node -v: Windows PowerShell 5.1 теряет кавычки в аргументах программ, node -e с кодом ненадёжен
+  try { $v = [string](& $p -v 2>$null); return ($v -match '^v(\d+)\.') -and ([int]$Matches[1] -ge 20) } catch { return $false }
 }
 $NodeDir = Join-Path $Dir 'node'
 $node = $null
