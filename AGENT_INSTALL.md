@@ -62,6 +62,11 @@ allowed permanently). Codex picks up the skill after it restarts. No Codex — s
 ## 6. Move existing credentials (optional)
 
 Ask whether to import the user's existing keys now. If yes:
+0. **From another password manager or a browser** — ask the user to export it themselves (Bitwarden: Tools → Export
+   vault → `.json`, *not* password-protected; 1Password: File → Export → `.1pux`; KeePassXC: Database → Export → CSV;
+   Chrome / Edge: Password Manager → Settings → Export passwords; Firefox: Passwords → ⋯ → Export; Safari: File →
+   Export → Passwords). Then run `svyazka import <that file>` (never open the file yourself) and remind the user to
+   delete the export afterwards — it is unencrypted. Cards and identities are not imported.
 1. Find candidates **by name only**, without opening contents: private keys in `~/.ssh` (files with a matching `.pub`
    or whose first line is `-----BEGIN`), hosts in `~/.ssh/config` (`Host`, `HostName`, `User`, `Port`, `IdentityFile`
    are not secrets), `.env` files in project folders the user names.

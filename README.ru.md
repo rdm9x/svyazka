@@ -38,6 +38,8 @@ svyazka add token "Cloudflare API" --shelf my-app --value ask   # значени
   Хранилище — один файл `~/.svyazka/vault.json`.
 - **Бэкап и несколько компьютеров** — `svyazka sync` кладёт зашифрованную копию в папку (по умолчанию iCloud Drive / OneDrive)
   и подтягивает изменения с других ваших компьютеров.
+- **Переезд без ручного ввода** — импорт из Bitwarden, 1Password, KeePassXC и браузеров (Настройки → Импорт или
+  `svyazka import`); заметки и секреты 2FA ложатся в скрытые поля, которых агенты не видят. Выгрузка обратно — Bitwarden JSON или CSV.
 - **Работает и по SSH** — когда окон нет, пароль и подтверждения спрашиваются в терминале.
 
 ## Установка
@@ -93,7 +95,8 @@ powershell -ExecutionPolicy Bypass -File $env:TEMP\svyazka-install.ps1
 | `svyazka get` / `copy` / `rm` | показать, скопировать (буфер очистится через 30 с), удалить — **нужен Touch ID / Windows Hello** |
 | `svyazka pay`, `paid <запись>` | ближайшие оплаты, отметить оплату |
 | `svyazka sync`, `config sync-dir <папка>` | зашифрованный бэкап и слияние между вашими компьютерами |
-| `svyazka import <файл>` | бэкап Связки (слияние) или открытый JSON в [формате импорта](IMPORT.md) |
+| `svyazka import <файл>` | бэкап Связки (слияние), JSON в [формате импорта](IMPORT.md) или выгрузка из Bitwarden, 1Password, KeePassXC, Chrome / Edge / Firefox / Safari |
+| `svyazka export <файл>` | для другого менеджера: `.json` (Bitwarden, все записи) или `.csv` (пароли) — после Touch ID, без шифрования |
 | `svyazka log`, `status`, `lock` | журнал, состояние, закрыть сейчас |
 | `svyazka mcp`, `mcp config` | MCP-сервер для Cursor, Claude Desktop, Gemini CLI; строка для их настроек |
 | `svyazka config lang ru\|en\|auto` | язык интерфейса (auto — по системе) |

@@ -1,5 +1,6 @@
 // Связка — ключи, пароли и оплаты. Всё шифруется на устройстве, сети не нужно.
 
+import { convertForeign, toCSV, toBitwarden } from './importers.js';
 import { ITER, uid, rand, deriveKey, seal, openVault, decryptWith, importRaw, b64d, newVault, normalize, mergeData, tombstone, isVaultBlob, isPlainImport,
   addMonths, todayISO, markPaid, planPlainImport } from './core.js';
 import { makeT, setLang, lang, langFromTag, locale, plural } from './i18n.js';
@@ -19,7 +20,7 @@ const t = makeT({ en: EN });
   document.title = t('Связка');
 }
 
-const VERSION = '1.7.0';
+const VERSION = '1.8.0';
 
 const $ = (s, r = document) => r.querySelector(s);
 const app = $('#app');
@@ -182,12 +183,17 @@ const I = {
   shield: '<path d="M12 3 5 6v5.5c0 4.5 3 8 7 9.5 4-1.5 7-5 7-9.5V6z"/><path d="m9 12 2 2 4-4"/>',
 };
 
+// Скрытые заметки: видны только по запросу, агентам — никогда (сюда попадают заметки из других менеджеров паролей)
+const HIDDEN = { k: 'hidden', l: t('Скрытые заметки'), secret: 1, multi: 1 };
+
 const TYPES = {
   password: { label: t('Пароль'), icon: 'key', ph: 'GitHub', desc: t('Логин и пароль от сайта, панели, почты'), fields: [
     { k: 'login', l: t('Логин / e-mail'), al: t('Логин') },
     { k: 'password', l: t('Пароль'), secret: 1, gen: 1, mono: 1 },
     { k: 'url', l: t('Адрес'), url: 1, ph: 'https://' },
+    { k: 'totp', l: t('Код 2FA (TOTP)'), secret: 1, mono: 1, ph: 'otpauth://totp/…' },
     { k: 'note', l: t('Заметка'), multi: 1 },
+    HIDDEN,
   ] },
   ssh: { label: 'SSH', icon: 'terminal', ph: 'VPS-1 · root', desc: t('Хост, пользователь, ключи'), fields: [
     { k: 'host', l: t('Хост'), mono: 1, ph: '203.0.113.10' },
@@ -197,16 +203,19 @@ const TYPES = {
     { k: 'publicKey', l: t('Публичный ключ'), multi: 1, mono: 1, ph: 'ssh-ed25519 AAAA…' },
     { k: 'passphrase', l: t('Passphrase / пароль'), al: t('Пароль'), secret: 1, gen: 1, mono: 1 },
     { k: 'note', l: t('Заметка'), multi: 1 },
+    HIDDEN,
   ] },
   token: { label: t('Токен'), icon: 'token', ph: 'Cloudflare API', desc: t('API-ключ или токен со сроком действия'), fields: [
     { k: 'value', l: t('Значение'), secret: 1, multi: 1, mono: 1 },
     { k: 'usage', l: t('Где используется') },
     { k: 'expires', l: t('Истекает'), date: 1 },
     { k: 'note', l: t('Заметка'), multi: 1 },
+    HIDDEN,
   ] },
   payment: { label: t('Оплата'), icon: 'card', ph: t('Аренда VPS'), desc: t('VPS, домен, подписка — с напоминанием'), fields: [] },
   note: { label: t('Заметка'), icon: 'note', ph: t('Сетевые настройки'), desc: t('IP-адреса, конфиги, инструкции'), fields: [
     { k: 'text', l: t('Текст'), multi: 1, big: 1 },
+    HIDDEN,
   ] },
 };
 const TYPE_ORDER = ['payment', 'password', 'ssh', 'token', 'note'];
@@ -285,7 +294,8 @@ function accessText(it) {
     add(t('Заметка'), f.note);
   } else {
     if (it.type === 'ssh' && f.host) add(t('Подключение'), sshCmd(f));
-    const order = ACCESS_ORDER[it.type] || ty.fields.map((x) => x.k);
+    // скрытые заметки и секрет 2FA в «доступ» не входят — их копируют отдельно
+    const order = ACCESS_ORDER[it.type] || ty.fields.map((x) => x.k).filter((k) => k !== 'hidden' && k !== 'totp');
     for (const k of order) {
       const fd = ty.fields.find((x) => x.k === k);
       add(fd.al || fd.l, fd.date ? fmtDate(f[k]) : f[k]);
@@ -606,7 +616,8 @@ function vSettings() {
     <h2 class="sec"><span>${t('Резервная копия')}</span></h2>
     <div class="glass list">
       <button class="row" data-act="export"><span class="ti t-ssh">${ic(I.download)}</span><span class="rt"><b>${t('Сохранить бэкап')}</b><small>${t('Последний: {0}', lb)}</small></span></button>
-      <button class="row" data-act="import"><span class="ti t-password">${ic(I.upload)}</span><span class="rt"><b>${t('Импорт из файла')}</b><small>${t('Бэкап заменит данные, файл импорта — добавит')}</small></span></button>
+      <button class="row" data-act="import"><span class="ti t-password">${ic(I.upload)}</span><span class="rt"><b>${t('Импорт из файла')}</b><small>${t('Бэкап, Bitwarden, 1Password, KeePassXC, браузеры')}</small></span></button>
+      <button class="row" data-act="export-foreign"><span class="ti t-note">${ic(I.download)}</span><span class="rt"><b>${t('Выгрузить для другого менеджера')}</b><small>${t('Bitwarden (.json) или CSV — без шифрования')}</small></span></button>
     </div>
     <h2 class="sec"><span>${t('Безопасность')}</span></h2>
     <div class="glass list">
@@ -845,7 +856,7 @@ function genPassword(n = 20) {
 function pickFile() {
   return new Promise((resolve) => {
     const i = document.createElement('input');
-    i.type = 'file'; i.accept = '.json,application/json'; i.hidden = true;
+    i.type = 'file'; i.accept = '.json,.csv,.1pux,application/json,text/csv'; i.hidden = true;
     i.onchange = () => { resolve(i.files[0] || null); i.remove(); };
     document.body.append(i);
     i.click();
@@ -1017,10 +1028,17 @@ async function exportBackup() {
 async function importBackup() {
   const file = await pickFile();
   if (!file) return;
-  let blob;
-  try {
-    blob = JSON.parse(await file.text());
-  } catch { return toast(t('Не удалось прочитать JSON')); }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let blob = null;
+  try { blob = JSON.parse(new TextDecoder().decode(bytes)); } catch {}
+  if (!isPlainImport(blob) && !isVaultBlob(blob)) {
+    // Bitwarden, 1Password, KeePassXC, браузеры → открытый формат импорта
+    let conv;
+    try { conv = await convertForeign(bytes, file.name, { inflateRaw }); }
+    catch (e) { return toast(e.message === 'BW_ENCRYPTED' ? t('Это зашифрованный экспорт Bitwarden — выгрузите заново в формате «.json» без пароля') : t('Не удалось прочитать файл')); }
+    if (!conv) return toast(t('Не узнаю формат файла'));
+    return importPlain(conv.data, conv);
+  }
   if (isPlainImport(blob)) return importPlain(blob);
   if (!isVaultBlob(blob)) return toast(t('Это не файл Связки'));
   let mode = 'replace';
@@ -1058,7 +1076,10 @@ async function importBackup() {
   toast(t('Восстановлено: {0}', nItems(S.data.items.length)));
 }
 
-async function importPlain(src) {
+// .1pux — zip: распаковка средствами браузера
+const inflateRaw = async (u8) => new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+
+async function importPlain(src, conv = null) {
   if (!S) return toast(t('Сначала создайте хранилище, затем импорт в Настройках'));
   const { shelves, items, newShelves, skipped } = planPlainImport(S.data, src);
   if (!items.length) return toast(skipped ? t('Новых записей нет, пропущено: {0}', skipped) : t('В файле нет записей'));
@@ -1067,7 +1088,9 @@ async function importPlain(src) {
     .map(([ty, n]) => `${TYPES[ty].label.toLowerCase()} — ${n}`).join(', ');
   const ok = await modal({
     title: t('Импорт: {0}', nItems(items.length)),
-    text: [byType + '.', newShelves ? t('Новых полок: {0}.', newShelves) : '', skipped ? t('Пропущено (дубли или пустые): {0}.', skipped) : ''].filter(Boolean).join(' '),
+    text: [conv ? t('Из {0}:', conv.source) : '', byType + '.',
+      conv && Object.keys(conv.skipped).length ? t('Не переносятся (карты, документы и т. п.): {0}.', Object.values(conv.skipped).reduce((a, b) => a + b, 0)) : '',
+      conv ? t('Заметки и коды 2FA лягут в скрытые поля.') : '', newShelves ? t('Новых полок: {0}.', newShelves) : '', skipped ? t('Пропущено (дубли или пустые): {0}.', skipped) : ''].filter(Boolean).join(' '),
     ok: t('Добавить'),
   });
   if (!ok) return;
@@ -1083,11 +1106,30 @@ async function importPlain(src) {
   });
 }
 
+// Выгрузка для другого менеджера паролей: открытый файл — с предупреждением
+async function exportForeign() {
+  const m = await modal({
+    title: t('Выгрузить для другого менеджера'),
+    text: t('Bitwarden (.json) — все записи с полками. CSV — только пароли, его понимают почти все менеджеры и браузеры. Файл будет НЕ зашифрован: импортируйте его и сразу удалите.'),
+    ok: 'Bitwarden (.json)', alt: 'CSV',
+  });
+  if (!m) return;
+  const csv = !!m._alt;
+  const text = csv ? toCSV(S.data) : toBitwarden(S.data);
+  const file = new File([text], `svyazka-export-${todayISO()}.${csv ? 'csv' : 'json'}`, { type: csv ? 'text/csv' : 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file); a.download = file.name;
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast(t('Файл выгружен — удалите его после импорта'));
+}
+
 const A = {
   lock: () => { store.lockAgent(); lock(); },
   bio: () => tryBio(),
   import: importBackup,
   export: exportBackup,
+  'export-foreign': exportForeign,
   copy: (el) => { const v = item(el.dataset.id)?.f[el.dataset.k]; if (v) copyText(v); },
   'copy-text': (el) => copyText(el.dataset.text),
   'copy-access': (el) => { const it = item(el.dataset.id); if (it) copyText(accessText(it), t('Доступ скопирован')); },

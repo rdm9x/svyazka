@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.8.0 — 2026-11-28
+
+- **Import from other password managers and browsers**: Bitwarden (`.json`, `.csv`), 1Password (`.1pux`, `.csv`),
+  KeePassXC (`.csv`), Chrome / Edge / Firefox / Safari (`.csv`) — `svyazka import <file>` or Settings → Import.
+  Folders and vaults become shelves; several accounts on one site keep separate items; cards and identities are skipped.
+- **Export back**: `svyazka export file.json` (Bitwarden, all items) or `file.csv` (passwords) — after Touch ID;
+  in the app: Settings → Export for another manager.
+- New hidden fields: **hidden notes** (all types except payments) and **2FA secret (TOTP)** for passwords. Notes and
+  secrets from other managers go there, so agents never see them.
+- “Copy access” no longer includes hidden notes or the 2FA secret.
+
 ## 1.7.0 — 2026-11-28
 
 - **MCP server** `svyazka mcp` for Cursor, Claude Desktop, Gemini CLI and other agents: list, find and show items,
@@ -70,5 +81,4 @@ First public release.
 
 ## Planned
 
-- Import from Bitwarden, 1Password, KeePassXC, browser exports; export back.
 - TOTP (2FA) codes; macOS notifications for upcoming payments; Homebrew tap; signed and notarized builds.

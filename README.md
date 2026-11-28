@@ -38,6 +38,8 @@ Every access is logged with who did it — you, Claude or Codex.
   The vault is a single file, `~/.svyazka/vault.json`.
 - **Backup and multiple computers** — `svyazka sync` writes an encrypted copy to a folder (iCloud Drive / OneDrive by default)
   and merges changes from your other computers.
+- **Move in and out** — import from Bitwarden, 1Password, KeePassXC and browsers (Settings → Import or `svyazka import`);
+  notes and 2FA secrets land in hidden fields agents never see. Export back to Bitwarden JSON or CSV.
 - **Works over SSH too** — with no GUI session, passwords and confirmations are asked in the terminal.
 
 ## Install
@@ -93,7 +95,8 @@ Open **Svyazka** from Spotlight (Mac) or the Start menu (Windows), or run `svyaz
 | `svyazka get` / `copy` / `rm` | reveal, copy to clipboard (cleared after 30 s), delete — **Touch ID / Windows Hello required** |
 | `svyazka pay`, `paid <item>` | upcoming payments, mark as paid |
 | `svyazka sync`, `config sync-dir <folder>` | encrypted backup and merge between your computers |
-| `svyazka import <file>` | a Svyazka backup (merge) or plain JSON in the [import format](IMPORT.md) |
+| `svyazka import <file>` | a Svyazka backup (merge), JSON in the [import format](IMPORT.md), or an export from Bitwarden, 1Password, KeePassXC, Chrome / Edge / Firefox / Safari |
+| `svyazka export <file>` | for another manager: `.json` (Bitwarden, all items) or `.csv` (passwords) — after Touch ID, unencrypted |
 | `svyazka log`, `status`, `lock` | audit log, state, lock now |
 | `svyazka mcp`, `mcp config` | MCP server for Cursor, Claude Desktop, Gemini CLI; the snippet for their settings |
 | `svyazka config lang en\|ru\|auto` | interface language (auto — by the system) |

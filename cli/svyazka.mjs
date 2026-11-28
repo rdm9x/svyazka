@@ -14,6 +14,8 @@ import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import * as core from '../core.js';
+import * as foreign from '../importers.js';
+import zlib from 'node:zlib';
 import * as sys from './platform.mjs';
 import * as i18n from '../i18n.js';
 import EN from '../lang/en-cli.js';
@@ -251,7 +253,8 @@ function runAgent() {
   // Значения полей из запроса: обычные строки, {ask:1} — спросить в окне, {gen:N} — сгенерировать.
   // Человеческие названия полей для окна ввода
   const fieldLabel = (k) => ({ value: t('значение токена (ключ, токен, ссылку или содержимое .env)'), password: t('пароль'), privateKey: t('приватный SSH-ключ'),
-    passphrase: t('пароль (passphrase) от SSH-ключа'), login: t('логин'), text: t('текст заметки'), url: t('адрес') })[k];
+    passphrase: t('пароль (passphrase) от SSH-ключа'), login: t('логин'), text: t('текст заметки'), url: t('адрес'),
+    totp: t('секрет 2FA (TOTP) — строку otpauth:// или ключ из настроек 2FA'), hidden: t('скрытую заметку') })[k];
 
   function materialize(type, title, fields, ctx = {}) {
     const out = {};
@@ -468,7 +471,7 @@ function runAgent() {
     async get({ ref, field }, c) {
       await ensureUnlocked(t('{0} хочет прочитать секрет «{1}».', who(c), ref));
       const it = resolve(ref);
-      const k = field || (core.SECRET_FIELDS[it.type] || [])[0] || Object.keys(it.f)[0];
+      const k = field || (core.SECRET_FIELDS[it.type] || []).find((x) => it.f[x]) || (core.SECRET_FIELDS[it.type] || [])[0] || Object.keys(it.f)[0];
       if (!(k in it.f)) fail(t('В «{0}» нет поля {1}', it.title, k));
       await confirmSecret(t('показать «{0}» → {1} ({2})', it.title, k, who(c)));
       audit(c, 'get', label(it), k);
@@ -477,7 +480,7 @@ function runAgent() {
     async copy({ ref, field }, c) {
       await ensureUnlocked(t('{0} копирует секрет «{1}».', who(c), ref));
       const it = resolve(ref);
-      const k = field || (core.SECRET_FIELDS[it.type] || [])[0] || Object.keys(it.f)[0];
+      const k = field || (core.SECRET_FIELDS[it.type] || []).find((x) => it.f[x]) || (core.SECRET_FIELDS[it.type] || [])[0] || Object.keys(it.f)[0];
       if (!(k in it.f)) fail(t('В «{0}» нет поля {1}', it.title, k));
       await confirmSecret(t('скопировать «{0}» → {1} ({2})', it.title, k, who(c)));
       if (!sys.clipboardSet(String(it.f[k]))) fail(sys.LINUX ? t('Буфер обмена недоступен (нужен wl-copy или xclip)') : t('Буфер обмена недоступен'));
@@ -582,6 +585,19 @@ function runAgent() {
       return t('Объединено: новых {0}, обновлено {1}, удалено {2}', stats.added, stats.updated, stats.removed);
     },
 
+    // Выгрузка для другого менеджера паролей: открытый файл, поэтому только после Touch ID / Windows Hello
+    async export({ file, format }, c) {
+      await ensureUnlocked(t('{0} выгружает Связку в файл.', who(c)));
+      if (!['csv', 'bitwarden'].includes(format)) fail(t('Формат: csv или bitwarden'));
+      if (!path.isAbsolute(file)) fail(t('Нужен полный путь к файлу'));
+      await confirmSecret(t('выгрузить ВСЕ записи без шифрования в {0} ({1})', path.basename(file), who(c)));
+      const text = format === 'csv' ? foreign.toCSV(st.data) : foreign.toBitwarden(st.data);
+      fs.writeFileSync(file, text, { mode: 0o600, flag: 'wx' });
+      audit(c, 'export', path.basename(file), format);
+      const n = format === 'csv' ? st.data.items.filter((i) => i.type === 'password').length : st.data.items.length;
+      return t('Выгружено записей: {0} → {1}', n, file) + '\n' + t('⚠ Файл не зашифрован: импортируйте его и сразу удалите.');
+    },
+
     async sync(a, c) {
       await ensureUnlocked(t('{0} делает бэкап Связки.', who(c)));
       const DIRS = syncDir();
@@ -625,7 +641,7 @@ function runAgent() {
 
   function startUI() {
     const token = core.b64e(core.rand(24)).replace(/[+/=]/g, '');
-    const allow = new Set(['/index.html', '/app.js', '/core.js', '/i18n.js', '/lang/en-app.js', '/lang/en-cli.js', '/styles.css', '/icons/icon.svg', '/icons/icon-512.png']);
+    const allow = new Set(['/index.html', '/app.js', '/core.js', '/i18n.js', '/importers.js', '/lang/en-app.js', '/lang/en-cli.js', '/styles.css', '/icons/icon.svg', '/icons/icon-512.png']);
     const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
     return new Promise((res, rej) => {
       const srv = http.createServer((req, rsp) => {
@@ -931,7 +947,7 @@ const help = () => [
   '',
   t('  svyazka status | unlock | lock | stop   состояние, открыть (окно с паролем), закрыть, остановить агент'),
   t('  svyazka init                            создать пустое хранилище на Mac'),
-  t('  svyazka import <файл>                   бэкап Связки (слияние) или открытый svyazka-import.json'),
+  t('  svyazka import <файл>                   бэкап Связки, svyazka-import.json, Bitwarden, 1Password, KeePassXC, браузеры'),
   t('  svyazka ls [полка]                      полки / записи полки (без секретов)'),
   t('  svyazka find <текст>                    поиск по названиям и открытым полям'),
   t('  svyazka show <запись>                   открытые поля и какие секреты есть'),
@@ -954,6 +970,7 @@ const help = () => [
   t('  svyazka config quick-unlock on|off      открывать Связку по Touch ID / Windows Hello (по умолчанию включено)'),
   t('  svyazka config lang ru|en|auto          язык сообщений (auto — как в системе)'),
   t('  svyazka ui                              открыть интерфейс Связки в браузере'),
+  t('  svyazka export <файл> [--format csv|bitwarden]  выгрузить для другого менеджера (после Touch ID; файл открытый)'),
   t('  svyazka mcp [config]                    MCP-сервер для Cursor, Claude Desktop, Gemini CLI; config — строка для их настроек'),
   t('  svyazka log [N]                         журнал действий'),
   '',
@@ -1060,7 +1077,32 @@ async function main() {
     case 'import': {
       const file = args.join(' ').replace(/^~(?=\/)/, HOME);
       if (!file) fail(t('svyazka import <файл>'));
-      return console.log(await call('import', { text: fs.readFileSync(file, 'utf8'), name: path.basename(file) }));
+      const bytes = fs.readFileSync(file);
+      let text = bytes.toString('utf8');
+      // не файл Связки — пробуем Bitwarden, 1Password, KeePassXC, браузеры; в агент уходит открытый формат импорта
+      let isOurs = false;
+      try { const j = JSON.parse(text); isOurs = core.isVaultBlob(j) || core.isPlainImport(j); } catch {}
+      if (!isOurs) {
+        let conv;
+        try { conv = await foreign.convertForeign(new Uint8Array(bytes), path.basename(file), { inflateRaw: (u8) => zlib.inflateRawSync(u8) }); }
+        catch (e) { fail(e.message === 'BW_ENCRYPTED' ? t('Это зашифрованный экспорт Bitwarden — выгрузите заново в формате «.json» без пароля') : t('Не удалось прочитать файл: {0}', e.message)); }
+        if (!conv) fail(t('Не узнаю формат. Поддерживаются: бэкап Связки, IMPORT.md, Bitwarden (.json, .csv), 1Password (.1pux, .csv), KeePassXC (.csv), Chrome / Edge / Firefox / Safari (.csv)'));
+        text = JSON.stringify(conv.data);
+        const sk = Object.values(conv.skipped).reduce((a, b) => a + b, 0);
+        console.log(t('Формат: {0}', conv.source) + (sk ? ' · ' + t('не переносятся (карты, документы и т. п.): {0}', sk) : ''));
+      }
+      return console.log(await call('import', { text, name: path.basename(file) }));
+    }
+    case 'export': {
+      const fmtArg = args.indexOf('--format');
+      const format0 = fmtArg >= 0 ? args[fmtArg + 1] : null;
+      const rest = args.filter((a, i) => i !== fmtArg && i !== fmtArg + 1 || fmtArg < 0);
+      const file = rest.join(' ').replace(/^~(?=\/)/, HOME);
+      if (!file) fail(t('svyazka export <файл.csv | файл.json> [--format csv|bitwarden]'));
+      const abs = path.resolve(file);
+      if (fs.existsSync(abs)) fail(t('Файл уже есть: {0}', abs));
+      const format = format0 || (/\.csv$/i.test(abs) ? 'csv' : 'bitwarden');
+      return console.log(await call('export', { file: abs, format }));
     }
     case 'sync': return console.log(await call('sync'));
     case 'config': {

@@ -1,5 +1,10 @@
 # Import format
 
+> **Moving from another password manager?** You don't need this format: `svyazka import` (or Settings → Import)
+> reads exports from Bitwarden (`.json` without a password, `.csv`), 1Password (`.1pux`, `.csv`), KeePassXC (`.csv`)
+> and Chrome / Edge / Firefox / Safari (`.csv`) directly. Folders and vaults become shelves; notes, hidden fields and
+> 2FA secrets go into hidden fields; cards and identities are skipped. `svyazka export file.json|file.csv` exports back.
+
 A plain (**unencrypted**) JSON for bulk-loading items: `svyazka import file.json` or the app → Settings → Import.
 Items are **added** to the existing vault: shelves are matched by name (case-insensitive), duplicates
 (same shelf + type + title) are skipped, so importing twice is safe.
@@ -32,11 +37,13 @@ Items are **added** to the existing vault: shelves are matched by name (case-ins
 
 | type | fields |
 |---|---|
-| `password` | `title`, `url`, `login`, `password`, `note` |
-| `ssh` | `title`, `host`, `user`, `port`, `privateKey`, `publicKey`, `passphrase`, `note` |
-| `token` | `title`, `value` (a value or several `KEY=VALUE` lines — `svyazka run` exports each as an env var), `usage`, `expires` (YYYY-MM-DD), `note` |
+| `password` | `title`, `url`, `login`, `password`, `totp` (2FA secret), `note`, `hidden` |
+| `ssh` | `title`, `host`, `user`, `port`, `privateKey`, `publicKey`, `passphrase`, `note`, `hidden` |
+| `token` | `title`, `value` (a value or several `KEY=VALUE` lines — `svyazka run` exports each as an env var), `usage`, `expires` (YYYY-MM-DD), `note`, `hidden` |
 | `payment` | `title`, `amount`, `currency` (ISO: USD, EUR, RUB…), `period` (months: 1, 3, 6, 12, 24, 36; 0 — one-off), `nextDate` (YYYY-MM-DD), `remind` (days), `autoRenew`, `method`, `url`, `note` |
-| `note` | `title`, `text` |
+| `note` | `title`, `text`, `hidden` |
+
+`hidden` — hidden notes: shown only after Touch ID, never to agents (`note` and `text` are visible to agents).
 
 - Shelf `color` is optional: `#7aa2ff #5fe0a8 #ffc266 #ff7eb6 #b18cff #5ad1f0 #ff8a5c #a3aec2`.
 - Empty fields may be omitted; line breaks are `\n`; unknown fields are ignored; an item with no values is skipped.

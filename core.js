@@ -161,11 +161,12 @@ export function mergeData(local, incoming) {
 
 // k — поле, secret — секрет (не показывается без подтверждения), date — дата YYYY-MM-DD
 export const FIELDS = {
-  password: [{ k: 'login' }, { k: 'password', secret: 1 }, { k: 'url' }, { k: 'note' }],
-  ssh: [{ k: 'host' }, { k: 'user' }, { k: 'port' }, { k: 'privateKey', secret: 1 }, { k: 'publicKey' }, { k: 'passphrase', secret: 1 }, { k: 'note' }],
-  token: [{ k: 'value', secret: 1 }, { k: 'usage' }, { k: 'expires', date: 1 }, { k: 'note' }],
+  // totp — секрет для кодов 2FA; hidden — скрытые заметки (видны только после Touch ID, агентам — никогда)
+  password: [{ k: 'login' }, { k: 'password', secret: 1 }, { k: 'url' }, { k: 'totp', secret: 1 }, { k: 'note' }, { k: 'hidden', secret: 1 }],
+  ssh: [{ k: 'host' }, { k: 'user' }, { k: 'port' }, { k: 'privateKey', secret: 1 }, { k: 'publicKey' }, { k: 'passphrase', secret: 1 }, { k: 'note' }, { k: 'hidden', secret: 1 }],
+  token: [{ k: 'value', secret: 1 }, { k: 'usage' }, { k: 'expires', date: 1 }, { k: 'note' }, { k: 'hidden', secret: 1 }],
   payment: [{ k: 'amount' }, { k: 'currency' }, { k: 'period' }, { k: 'nextDate', date: 1 }, { k: 'remind' }, { k: 'autoRenew' }, { k: 'method' }, { k: 'url' }, { k: 'note' }],
-  note: [{ k: 'text' }],
+  note: [{ k: 'text' }, { k: 'hidden', secret: 1 }],
 };
 export const SECRET_FIELDS = Object.fromEntries(Object.entries(FIELDS).map(([t, fs]) => [t, fs.filter((f) => f.secret).map((f) => f.k)]));
 export const PERIOD_MONTHS = [1, 3, 6, 12, 24, 36, 0];

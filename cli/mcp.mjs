@@ -57,7 +57,7 @@ function tools(core) {
     },
     {
       name: 'svyazka_add',
-      description: `Save a new item to Svyazka — do it right away whenever a new secret appears (generated password, created token, received credentials). Types: ${types.join(', ')}. Secret fields (password, privateKey, passphrase, value) accept ONLY "gen" / "gen:32" (generate inside Svyazka), "ask" (the user types it in a system dialog — tell them in chat first) or "@/path/to/file" (read from a file). Other fields are plain text. Payment fields: amount, currency, period (months: 1,3,6,12,24,36, 0 = once), nextDate (YYYY-MM-DD), remind (days), autoRenew, method, url, note.`,
+      description: `Save a new item to Svyazka — do it right away whenever a new secret appears (generated password, created token, received credentials). Types: ${types.join(', ')}. Secret fields (password, totp, privateKey, passphrase, value, hidden) accept ONLY "gen" / "gen:32" (generate inside Svyazka), "ask" (the user types it in a system dialog — tell them in chat first) or "@/path/to/file" (read from a file). Other fields are plain text. Payment fields: amount, currency, period (months: 1,3,6,12,24,36, 0 = once), nextDate (YYYY-MM-DD), remind (days), autoRenew, method, url, note.`,
       inputSchema: S({
         type: { type: 'string', enum: types },
         title: str('Item title'),
