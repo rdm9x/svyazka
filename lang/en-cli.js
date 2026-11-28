@@ -202,7 +202,7 @@ export default {
   // svyazka help
   'svyazka — Связка: ключница для людей и ИИ-агентов (секреты не показываются без Touch ID / Windows Hello)': 'svyazka — Svyazka: a keychain for people and AI agents (secrets are never shown without Touch ID / Windows Hello)',
   '  svyazka status | unlock | lock | stop   состояние, открыть (окно с паролем), закрыть, остановить агент': '  svyazka status | unlock | lock | stop   status, unlock (password window), lock, stop the agent',
-  '  svyazka init                            создать пустое хранилище на Mac': '  svyazka init                            create an empty vault on this computer',
+  '  svyazka init                            создать пустое хранилище на этом компьютере': '  svyazka init                            create an empty vault on this computer',
   '  svyazka import <файл>                   бэкап Связки (слияние) или открытый svyazka-import.json': '  svyazka import <file>                   a Svyazka backup (merged) or a plain svyazka-import.json',
   '  svyazka ls [полка]                      полки / записи полки (без секретов)': '  svyazka ls [shelf]                      shelves / records on a shelf (no secrets)',
   '  svyazka find <текст>                    поиск по названиям и открытым полям': '  svyazka find <text>                     search titles and non-secret fields',
@@ -250,4 +250,7 @@ export default {
   "не переносятся (карты, документы и т. п.): {0}": "not imported (cards, identities etc.): {0}",
   "svyazka export <файл.csv | файл.json> [--format csv|bitwarden]": "svyazka export <file.csv | file.json> [--format csv|bitwarden]",
   "Файл уже есть: {0}": "File already exists: {0}",
+  "Браузер": "Browser",
+  "Поле {0} не передаётся в команды — его видит только человек: svyazka get": "Field {0} is not passed to commands — only a person can see it: svyazka get",
+  "Длина gen — от 8 до 256 символов": "gen length must be 8 to 256 characters",
 };

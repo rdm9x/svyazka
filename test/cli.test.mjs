@@ -218,3 +218,27 @@ test('svyazka config lang en важнее SVYAZKA_LANG — и в команде,
   assert.match(s.run(['config', 'lang', 'auto']).stdout, /Язык: русский/);
   assert.match(s.run(['ls', 'nope']).stderr, /Нет полки «nope»/);
 });
+
+test('run: значения .env в кавычках скрыты; get заметки; gen:0 отклоняется', (t) => {
+  const s = sandbox(); t.after(s.stop);
+  assert.equal(s.run(['init']).status, 0);
+  assert.equal(s.run(['add', 'token', 'Env', '--value', '-'], { input: 'API_KEY="abcdef123456"\nOTHER=\'qwerty98765\'\n' }).status, 0);
+  const r = s.run(['run', 'Env', '--', process.execPath, '-e', 'console.log(process.env.API_KEY, process.env.OTHER)']);
+  assert.equal(r.stdout.trim(), '••• •••');
+  assert.equal(s.run(['add', 'note', 'N1', '--text', 'hello']).status, 0);
+  assert.equal(s.run(['get', 'N1']).stdout.trim(), 'hello');
+  const g = s.run(['add', 'password', 'P0', '--password', 'gen:0']);
+  assert.notEqual(g.status, 0);
+});
+
+test('агент: один на папку — второй запуск сразу выходит, замок убирается при stop', { skip: win && 'проверяется на macOS и Linux' }, (t) => {
+  const s = sandbox(); t.after(s.stop);
+  assert.equal(s.run(['init']).status, 0);
+  const second = spawnSync(process.execPath, [CLI, '__agent'], { env: { ...process.env, SVYAZKA_HOME: s.home, SVYAZKA_TEST: '1' }, timeout: 10000 });
+  assert.equal(second.status, 0);
+  assert.ok(fs.existsSync(path.join(s.home, 'agent.lock')));
+  assert.equal(s.run(['status']).status, 0);
+  s.run(['stop']);
+  for (let i = 0; i < 40 && fs.existsSync(path.join(s.home, 'agent.lock')); i++) spawnSync(process.execPath, ['-e', 'setTimeout(()=>{},50)']);
+  assert.ok(!fs.existsSync(path.join(s.home, 'agent.lock')));
+});

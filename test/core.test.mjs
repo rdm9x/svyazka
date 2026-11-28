@@ -103,3 +103,13 @@ test('deriveRaw даёт тот же ключ, что deriveKey', async () => {
   const key2 = await c.importRaw(await c.deriveRaw('pw-12345678', salt, ITER));
   assert.ok(await c.decryptWith(blob, key2));
 });
+
+test('сумма: запятая — дробная или тысячи, пробелы', async () => {
+  const { normAmount } = await import('../core.js');
+  assert.equal(normAmount('1,200'), '1200');
+  assert.equal(normAmount('1 990,50'), '1990.50');
+  assert.equal(normAmount('4.51'), '4.51');
+  assert.equal(normAmount('1.200,50'), '1200.50');
+  assert.equal(normAmount('1,5'), '1.5');
+  assert.equal(normAmount(''), '');
+});

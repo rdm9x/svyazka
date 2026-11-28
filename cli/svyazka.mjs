@@ -87,9 +87,10 @@ const GUI = sys.GUI;
 
 // Язык сообщений: svyazka config lang → SVYAZKA_LANG → язык системы. Читается заново при каждом запросе.
 const t = i18n.makeT({ en: EN });
-function applyLang() {
+// pref — язык клиента (агент получает его с каждым запросом): config.lang всё равно главнее
+function applyLang(pref) {
   const c = readJSON(CONFIG).lang, e = process.env.SVYAZKA_LANG;
-  return i18n.setLang(i18n.LANGS.includes(c) ? c : i18n.LANGS.includes(e) ? e : i18n.langFromTag(e || sys.systemLang()));
+  return i18n.setLang(i18n.LANGS.includes(c) ? c : i18n.LANGS.includes(pref) ? pref : i18n.LANGS.includes(e) ? e : i18n.langFromTag(e || sys.systemLang()));
 }
 
 // Спросить у человека: тест → ответ из терминала → окно macOS → попросить клиента спросить в терминале
@@ -105,8 +106,29 @@ function prompt(kind, text) {
 
 const AGENT_TOKEN = core.b64e(core.rand(24));
 
-function runAgent() {
+// Один агент на папку хранилища. Замок agent.lock с pid: живой агент отвечает — новый выходит;
+// замок от упавшего процесса (или pid занят чужой программой дольше секунды) — забираем.
+const LOCK = path.join(DIR, 'agent.lock');
+async function agentLock() {
+  for (let i = 0; i < 60; i++) {
+    try { fs.writeFileSync(LOCK, String(process.pid), { flag: 'wx', mode: 0o600 }); return true; }
+    catch (e) { if (e.code !== 'EEXIST') throw e; }
+    let pid = 0;
+    try { pid = parseInt(fs.readFileSync(LOCK, 'utf8'), 10) || 0; } catch { continue; }
+    let alive = false;
+    try { process.kill(pid, 0); alive = pid > 0; } catch (e) { alive = e.code === 'EPERM'; }
+    if (alive) {
+      try { (await connect()).destroy(); return false; } catch {}
+      if (i < 20) { await new Promise((r) => setTimeout(r, 50)); continue; } // только что запустился — ждём до секунды
+    }
+    try { if (fs.readFileSync(LOCK, 'utf8') === String(pid)) fs.unlinkSync(LOCK); } catch {}
+  }
+  return false;
+}
+
+async function runAgent() {
   fs.mkdirSync(DIR, { recursive: true, mode: 0o700 });
+  if (!(await agentLock())) process.exit(0);
   if (!sys.WIN) { fs.chmodSync(DIR, 0o700); try { fs.unlinkSync(SOCK); } catch {} }
 
   const st = { key: null, salt: null, saltB64: null, iter: null, data: null, fileText: null, unlockedAt: 0, lastUse: 0 };
@@ -150,10 +172,13 @@ function runAgent() {
 
   // opts: { password } — пароль уже известен (окно приложения); { passwordFallback: false } — только отпечаток
   async function ensureUnlocked(reason, opts = {}) {
-    if (st.key) { await reload(); st.lastUse = Date.now(); return; }
+    if (st.key) { await reload(); st.lastUse = Date.now(); return false; }
+    // уже открывают (окно Touch ID для другого запроса) — дождаться; не вышло — своя попытка со своими условиями
+    while (unlocking) { try { await unlocking; } catch {} }
+    if (st.key) { st.lastUse = Date.now(); return false; }
     const text = readVault();
     if (!text) fail(t('Хранилища нет. Создайте: svyazka init (или svyazka import <бэкап>)'));
-    unlocking ||= (async () => {
+    unlocking = (async () => {
       const blob = JSON.parse(text);
       const id = quickId(blob.salt);
       const open = async (raw) => {
@@ -184,6 +209,7 @@ function runAgent() {
       fail(t('Неверный мастер-пароль'), 'BAD_PASSWORD');
     })().finally(() => { unlocking = null; });
     await unlocking;
+    return true; // открыто этим запросом (с его паролем / отпечатком)
   }
 
   const confirmSecret = async (what) => {
@@ -265,11 +291,11 @@ function runAgent() {
           + '\n\n' + t('Вставьте сюда {0}. Агент значение не увидит — оно сразу шифруется.', fieldLabel(k) || k));
         if (x == null) fail(t('Отменено'));
         out[k] = x;
-      } else if (v && typeof v === 'object' && v.gen) out[k] = genPassword(v.gen);
+      } else if (v && typeof v === 'object' && 'gen' in v) out[k] = genPassword(v.gen);
       else out[k] = v;
     }
     if (type === 'payment') {
-      if (out.amount != null) out.amount = String(out.amount).replace(',', '.').replace(/[^\d.]/g, '');
+      if (out.amount != null) out.amount = core.normAmount(out.amount);
       if (out.currency) out.currency = String(out.currency).toUpperCase();
       if (out.period != null) out.period = +out.period;
       if (out.remind != null) out.remind = +out.remind;
@@ -278,6 +304,11 @@ function runAgent() {
     }
     return out;
   }
+
+  // Скрытые заметки и секрет 2FA в команды не отдаются: их видит только человек (svyazka get после Touch ID)
+  const noCmdField = (field) => {
+    if (field === 'hidden' || field === 'totp') fail(t('Поле {0} не передаётся в команды — его видит только человек: svyazka get', field));
+  };
 
   function secretEnv(it, envmap) {
     const f = it.f, env = {};
@@ -293,6 +324,7 @@ function runAgent() {
     if (it.type === 'ssh') { put('SVYAZKA_HOST', f.host); put('SVYAZKA_USER', f.user); put('SVYAZKA_PORT', f.port); put('SVYAZKA_PASSPHRASE', f.passphrase); }
     if (it.type === 'note') put('SVYAZKA_TEXT', f.text);
     for (const [name, field] of Object.entries(envmap || {})) {
+      noCmdField(field);
       if (!(field in f)) fail(t('В «{0}» нет поля {1}. Поля: {2}', it.title, field, Object.keys(f).join(', ')));
       put(name, f[field]);
     }
@@ -300,7 +332,11 @@ function runAgent() {
   }
 
   const secretValues = (its) => its.flatMap((it) => (core.SECRET_FIELDS[it.type] || []).map((k) => it.f[k]))
-    .concat(its.filter((i) => i.type === 'token').flatMap((i) => String(i.f.value || '').split('\n').map((l) => l.split('=').slice(1).join('=').trim())))
+    .concat(its.filter((i) => i.type === 'token').flatMap((i) => String(i.f.value || '').split('\n').flatMap((l) => {
+      // значение строки KEY=VAL — и как есть, и без кавычек (в окружение команды оно попадает без них)
+      const v = l.split('=').slice(1).join('=').trim();
+      return [v, v.replace(/^(['"])(.*)\1$/, '$2')];
+    })))
     .filter((v) => v && String(v).length >= 4)
     .flatMap((v) => [String(v), ...String(v).split('\n').map((l) => l.trim()).filter((l) => l.length >= 8)])
     .sort((a, b) => b.length - a.length);
@@ -394,7 +430,7 @@ function runAgent() {
       if (p1 !== p2) fail(t('Пароли не совпадают'));
       const salt = core.rand(16);
       const raw = await core.deriveRaw(p1, salt);
-      Object.assign(st, { key: await core.importRaw(raw), raw, salt, iter: core.ITER, data: core.newVault(), unlockedAt: Date.now(), lastUse: Date.now() });
+      Object.assign(st, { key: await core.importRaw(raw), raw, salt, iter: core.ITER, data: core.newVault(i18n.lang() === 'en' ? 'USD' : 'RUB'), unlockedAt: Date.now(), lastUse: Date.now() });
       st.saltB64 = core.b64e(salt);
       await persist();
       if (quickEnabled() && (GUI || TEST)) qStore(quickId(st.saltB64), core.b64e(raw));
@@ -471,7 +507,7 @@ function runAgent() {
     async get({ ref, field }, c) {
       await ensureUnlocked(t('{0} хочет прочитать секрет «{1}».', who(c), ref));
       const it = resolve(ref);
-      const k = field || (core.SECRET_FIELDS[it.type] || []).find((x) => it.f[x]) || (core.SECRET_FIELDS[it.type] || [])[0] || Object.keys(it.f)[0];
+      const k = field || (core.SECRET_FIELDS[it.type] || []).find((x) => it.f[x]) || Object.keys(it.f)[0];
       if (!(k in it.f)) fail(t('В «{0}» нет поля {1}', it.title, k));
       await confirmSecret(t('показать «{0}» → {1} ({2})', it.title, k, who(c)));
       audit(c, 'get', label(it), k);
@@ -480,7 +516,7 @@ function runAgent() {
     async copy({ ref, field }, c) {
       await ensureUnlocked(t('{0} копирует секрет «{1}».', who(c), ref));
       const it = resolve(ref);
-      const k = field || (core.SECRET_FIELDS[it.type] || []).find((x) => it.f[x]) || (core.SECRET_FIELDS[it.type] || [])[0] || Object.keys(it.f)[0];
+      const k = field || (core.SECRET_FIELDS[it.type] || []).find((x) => it.f[x]) || Object.keys(it.f)[0];
       if (!(k in it.f)) fail(t('В «{0}» нет поля {1}', it.title, k));
       await confirmSecret(t('скопировать «{0}» → {1} ({2})', it.title, k, who(c)));
       if (!sys.clipboardSet(String(it.f[k]))) fail(sys.LINUX ? t('Буфер обмена недоступен (нужен wl-copy или xclip)') : t('Буфер обмена недоступен'));
@@ -499,7 +535,8 @@ function runAgent() {
       return { host: it.f.host || '', user: it.f.user || '', port: it.f.port || '', keyAdded: added, title: it.title };
     },
 
-    async run({ refs, envmap, cmd, cwd, env, sock }, c, conn) {
+    // shell: cmd — одна строка для оболочки (sh -c / cmd.exe /c — Node сам правильно экранирует для Windows)
+    async run({ refs, envmap, cmd, cwd, env, sock, shell }, c, conn) {
       await ensureUnlocked(t('{0} запускает команду с секретами: {1}.', who(c), cmd[0]));
       const its = refs.map(resolve);
       const senv = {};
@@ -508,17 +545,18 @@ function runAgent() {
         if (it.type === 'ssh') sshAdd(it, sock);
       }
       for (const [name, field] of Object.entries(envmap || {})) {
+        noCmdField(field);
         const it = its.find((x) => x.f[field] != null && x.f[field] !== '');
         if (!it) fail(t('Ни в одной записи нет поля {0}', field));
         senv[name] = String(it.f[field]);
       }
-      audit(c, 'run', its.map(label).join(', '), t('команда: {0}', path.basename(cmd[0])));
+      audit(c, 'run', its.map(label).join(', '), t('команда: {0}', path.basename(shell ? String(cmd[0]).trim().split(/\s+/)[0] : cmd[0])));
       const secrets = secretValues(its);
       const scrub = (s) => { for (const v of secrets) s = s.split(v).join('•••'); return s; };
       return await new Promise((res) => {
         const fullEnv = { ...env, ...senv };
         if (sock || env.SSH_AUTH_SOCK) fullEnv.SSH_AUTH_SOCK = sock || env.SSH_AUTH_SOCK;
-        const [bin, argv, extra] = sys.resolveSpawn(cmd[0], cmd.slice(1), fullEnv);
+        const [bin, argv, extra] = shell ? [String(cmd[0]), [], { shell: true }] : sys.resolveSpawn(cmd[0], cmd.slice(1), fullEnv);
         const child = spawn(bin, argv, { cwd, env: fullEnv, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, ...extra });
         const pipe = (stream, type) => {
           let buf = '';
@@ -692,7 +730,12 @@ function runAgent() {
                 }
                 st.lastUse = Date.now();
               } else {
-                await ensureUnlocked(t('Связка'), byPassword ? { password: a.password } : { passwordFallback: false });
+                const own = await ensureUnlocked(t('Связка'), byPassword ? { password: a.password } : { passwordFallback: false });
+                // открыл кто-то другой, пока ждали, — пароль окна всё равно должен быть верным
+                if (!own && byPassword) {
+                  const raw = await core.deriveRaw(a.password, st.salt, st.iter);
+                  if (raw.length !== st.raw.length || !raw.every((b, i) => b === st.raw[i])) fail(t('Неверный мастер-пароль'), 'BAD_PASSWORD');
+                }
               }
               audit(t('приложение'), 'unlock', '', byPassword ? t('паролем') : sys.verifyName());
               json(200, { raw: core.b64e(st.raw), salt: st.saltB64, iter: st.iter, verify: sys.verifyName() });
@@ -760,7 +803,7 @@ function runAgent() {
       let req;
       try { req = JSON.parse(line); } catch { return conn.end(); }
       if (sys.WIN && req.token !== AGENT_TOKEN) return conn.destroy();
-      applyLang();
+      applyLang(req.lang);
       const op = ops[req.op];
       try {
         if (!op) fail(t('Неизвестная операция {0}', req.op));
@@ -784,6 +827,7 @@ function runAgent() {
     try { sys.WIN ? fs.unlinkSync(AGENT_FILE) : fs.unlinkSync(SOCK); } catch {}
     process.exit(0);
   }
+  process.on('exit', () => { try { if (fs.readFileSync(LOCK, 'utf8') === String(process.pid)) fs.unlinkSync(LOCK); } catch {} });
   process.on('SIGTERM', cleanupExit);
   process.on('SIGINT', cleanupExit);
 }
@@ -867,7 +911,7 @@ async function callOnce(op, args, ans, sink) {
     });
     c.on('error', rej);
     c.on('close', () => rej(new UserError(t('Агент оборвал соединение'))));
-    c.write(JSON.stringify({ op, args, caller, answers: ans, token: c.token }) + '\n');
+    c.write(JSON.stringify({ op, args, caller, answers: ans, token: c.token, lang: i18n.lang() }) + '\n');
   });
 }
 
@@ -909,7 +953,11 @@ function parseFields(type, argv) {
     if (['shelf', 'title', 'json'].includes(k)) { rest[k] = v; continue; }
     if (!known.has(k)) fail(t('У типа {0} нет поля {1}. Поля: {2}', type, k, [...known].join(', ')));
     if (v === 'ask') fields[k] = { ask: 1 };
-    else if (/^gen(:\d+)?$/.test(v)) fields[k] = { gen: +(v.split(':')[1] || 24) };
+    else if (/^gen(:\d+)?$/.test(v)) {
+      const n = +(v.split(':')[1] || 24);
+      if (n < 8 || n > 256) fail(t('Длина gen — от 8 до 256 символов'));
+      fields[k] = { gen: n };
+    }
     else if (v === '-') fields[k] = fs.readFileSync(0, 'utf8').replace(/\n$/, '');
     else if (v.startsWith('@')) {
       const p = v.slice(1).replace(/^~(?=\/)/, HOME);
@@ -946,8 +994,9 @@ const help = () => [
   t('svyazka — Связка: ключница для людей и ИИ-агентов (секреты не показываются без Touch ID / Windows Hello)'),
   '',
   t('  svyazka status | unlock | lock | stop   состояние, открыть (окно с паролем), закрыть, остановить агент'),
-  t('  svyazka init                            создать пустое хранилище на Mac'),
+  t('  svyazka init                            создать пустое хранилище на этом компьютере'),
   t('  svyazka import <файл>                   бэкап Связки, svyazka-import.json, Bitwarden, 1Password, KeePassXC, браузеры'),
+  t('  svyazka export <файл> [--format csv|bitwarden]  выгрузить для другого менеджера (после Touch ID; файл открытый)'),
   t('  svyazka ls [полка]                      полки / записи полки (без секретов)'),
   t('  svyazka find <текст>                    поиск по названиям и открытым полям'),
   t('  svyazka show <запись>                   открытые поля и какие секреты есть'),
@@ -970,7 +1019,6 @@ const help = () => [
   t('  svyazka config quick-unlock on|off      открывать Связку по Touch ID / Windows Hello (по умолчанию включено)'),
   t('  svyazka config lang ru|en|auto          язык сообщений (auto — как в системе)'),
   t('  svyazka ui                              открыть интерфейс Связки в браузере'),
-  t('  svyazka export <файл> [--format csv|bitwarden]  выгрузить для другого менеджера (после Touch ID; файл открытый)'),
   t('  svyazka mcp [config]                    MCP-сервер для Cursor, Claude Desktop, Gemini CLI; config — строка для их настроек'),
   t('  svyazka log [N]                         журнал действий'),
   '',
@@ -1078,13 +1126,13 @@ async function main() {
       const file = args.join(' ').replace(/^~(?=\/)/, HOME);
       if (!file) fail(t('svyazka import <файл>'));
       const bytes = fs.readFileSync(file);
-      let text = bytes.toString('utf8');
+      let text = bytes.toString('utf8').replace(/^\uFEFF/, ''); // JSON из Блокнота Windows — с BOM
       // не файл Связки — пробуем Bitwarden, 1Password, KeePassXC, браузеры; в агент уходит открытый формат импорта
       let isOurs = false;
       try { const j = JSON.parse(text); isOurs = core.isVaultBlob(j) || core.isPlainImport(j); } catch {}
       if (!isOurs) {
         let conv;
-        try { conv = await foreign.convertForeign(new Uint8Array(bytes), path.basename(file), { inflateRaw: (u8) => zlib.inflateRawSync(u8) }); }
+        try { conv = await foreign.convertForeign(new Uint8Array(bytes), path.basename(file), { inflateRaw: (u8) => zlib.inflateRawSync(u8), browserName: t('Браузер') }); }
         catch (e) { fail(e.message === 'BW_ENCRYPTED' ? t('Это зашифрованный экспорт Bitwarden — выгрузите заново в формате «.json» без пароля') : t('Не удалось прочитать файл: {0}', e.message)); }
         if (!conv) fail(t('Не узнаю формат. Поддерживаются: бэкап Связки, IMPORT.md, Bitwarden (.json, .csv), 1Password (.1pux, .csv), KeePassXC (.csv), Chrome / Edge / Firefox / Safari (.csv)'));
         text = JSON.stringify(conv.data);

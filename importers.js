@@ -72,7 +72,7 @@ export async function unzipFile(u8, name, inflateRaw) {
 /* ───────── общее ───────── */
 
 const s = (v) => (v == null ? '' : String(v).replace(/\r\n/g, '\n').trim());
-const host = (u) => { try { return new URL(/^[a-z]+:\/\//i.test(u) ? u : 'https://' + u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+const host = (u) => { if (!u || !String(u).trim()) return ''; try { return new URL(/^[a-z]+:\/\//i.test(u) ? u : 'https://' + u).hostname.replace(/^www\./, ''); } catch { return ''; } };
 const join = (...parts) => parts.map(s).filter(Boolean).join('\n\n');
 
 // Сборщик результата: полки по имени, уникальные названия внутри полки и типа
@@ -84,10 +84,11 @@ function collector(source, defaultShelf) {
     if (!shelves.has(name)) shelves.set(name, []);
     const list = shelves.get(name);
     for (const k of Object.keys(item)) if (item[k] === '' || item[k] == null) delete item[k];
-    let title = s(item.title) || host(item.url) || item.login || source;
+    const base = s(item.title) || host(item.url) || s(item.login) || source;
+    let title = base;
     const taken = (x) => list.some((o) => o.type === item.type && o.title.toLowerCase() === x.toLowerCase());
-    if (taken(title) && item.login) title = `${title} (${item.login})`;
-    for (let i = 2; taken(title); i++) title = `${s(item.title) || source} (${i})`;
+    if (taken(title) && item.login && s(item.login) !== base) title = `${base} (${s(item.login)})`;
+    for (let i = 2; taken(title); i++) title = `${base} (${i})`;
     list.push({ ...item, title });
   };
   const skip = (why) => { skipped[why] = (skipped[why] || 0) + 1; };
@@ -105,8 +106,9 @@ function fromBitwardenJSON(j) {
   if (j.encrypted) throw new Error('BW_ENCRYPTED');
   const c = collector('Bitwarden', 'Bitwarden');
   const folders = new Map((j.folders || []).map((f) => [f.id, f.name]));
+  const collections = new Map((j.collections || []).map((f) => [f.id, f.name])); // экспорт организации
   for (const it of j.items || []) {
-    const shelf = folders.get(it.folderId) || 'Bitwarden';
+    const shelf = folders.get(it.folderId) || collections.get(it.collectionIds?.[0]) || 'Bitwarden';
     const fields = it.fields || [];
     const shown = fields.filter((f) => f.type === 0 || f.type === 2).map((f) => `${s(f.name)}: ${s(f.value)}`);
     const hiddenF = fields.filter((f) => f.type === 1).map((f) => `${s(f.name)}: ${s(f.value)}`);
@@ -126,7 +128,7 @@ function fromBitwardenJSON(j) {
 function fromBitwardenCSV(recs) {
   const c = collector('Bitwarden', 'Bitwarden');
   for (const r of recs) {
-    const shelf = r.folder || 'Bitwarden';
+    const shelf = r.folder || (r.collections || '').split(',')[0] || 'Bitwarden';
     if (r.type === 'note') c.add(shelf, { type: 'note', title: r.name, hidden: join(r.notes, r.fields) });
     else if (r.type === 'login' || !r.type) {
       c.add(shelf, { type: 'password', title: r.name, login: r.login_username, password: r.login_password, url: r.login_uri.split(',')[0], totp: r.login_totp, hidden: join(r.notes, r.fields) });
@@ -138,6 +140,8 @@ function fromBitwardenCSV(recs) {
 /* ───────── 1Password ───────── */
 
 const OP = { login: '001', card: '002', note: '003', identity: '004', password: '005', server: '110', api: '112', ssh: '114' };
+// категории, где обычные поля можно показать агентам (адреса, имена); у остальных (банк, паспорт, лицензия, SSN…) всё — в скрытое
+const OP_VISIBLE = new Set(['001', '005', '110', '112', '114', '102', '109', '111']);
 
 function fromOnePux(j) {
   const c = collector('1Password', '1Password');
@@ -168,7 +172,7 @@ function fromOnePux(j) {
             const text = v.string ?? v.url ?? v.email?.email_address ?? v.email ?? v.phone ?? v.menu ?? v.date ?? v.monthYear;
             if (text == null || typeof text === 'object') continue;
             if (!login && /^(username|user|login|логин|имя пользователя)$/i.test(title)) login = s(text);
-            else shown.push(`${title}: ${s(text)}`);
+            else (OP_VISIBLE.has(cat) ? shown : hidden).push(`${title}: ${s(text)}`);
           }
         }
         const url = s(o.url) || s(o.urls?.[0]?.url);
@@ -205,15 +209,15 @@ function fromLoginCSV(recs, source, map) {
 
 const keepassShelf = (g) => {
   const parts = s(g).split('/').filter(Boolean);
-  if (parts[0] && /^(root|корень|passwords|база)$/i.test(parts[0]) && parts.length > 1) parts.shift();
-  return parts.length ? parts[parts.length - 1] : 'KeePassXC';
+  if (parts[0] && /^(root|корень|passwords|база)$/i.test(parts[0])) parts.shift(); // корневая группа базы
+  return parts.length ? parts.join(' · ') : 'KeePassXC';
 };
 
-function fromCSV(rows) {
+function fromCSV(rows, browserName) {
   const recs = records(rows);
   const h = new Set(rows[0].map((x) => x.trim().toLowerCase()));
   const has = (...k) => k.every((x) => h.has(x));
-  if (has('folder', 'type', 'name', 'login_username', 'login_password')) return fromBitwardenCSV(recs);
+  if ((h.has('folder') || h.has('collections')) && has('type', 'name', 'login_username', 'login_password')) return fromBitwardenCSV(recs);
   if (has('group', 'title', 'username', 'password', 'url')) {
     return fromLoginCSV(recs, 'KeePassXC', (r) => ({ shelf: keepassShelf(r.group), title: r.title, login: r.username, password: r.password, url: r.url, totp: r.totp, hidden: r.notes }));
   }
@@ -229,7 +233,7 @@ function fromCSV(rows) {
     return fromLoginCSV(recs, 'CSV', (r) => ({ shelf: r.folder, title: r.name, login: r.username, password: r.password, url: r.url, totp: r.totp, hidden: r.note }));
   }
   if (has('name', 'url', 'username', 'password')) {
-    return fromLoginCSV(recs, 'Браузер', (r) => ({ title: r.name || host(r.url), login: r.username, password: r.password, url: r.url, hidden: r.note || r.notes }));
+    return fromLoginCSV(recs, browserName, (r) => ({ title: r.name || host(r.url), login: r.username, password: r.password, url: r.url, hidden: r.note || r.notes }));
   }
   return null;
 }
@@ -237,7 +241,7 @@ function fromCSV(rows) {
 /* ───────── распознать файл ───────── */
 
 // bytes — Uint8Array или строка. null — формат не распознан (тогда это файл Связки или неизвестный).
-export async function convertForeign(bytes, name = '', { inflateRaw } = {}) {
+export async function convertForeign(bytes, name = '', { inflateRaw, browserName = 'Browser' } = {}) {
   const u8 = typeof bytes === 'string' ? new TextEncoder().encode(bytes) : bytes;
   if (u8[0] === 0x50 && u8[1] === 0x4b) { // zip → 1Password .1pux
     if (!inflateRaw) throw new Error('ZIP_UNSUPPORTED');
@@ -250,6 +254,7 @@ export async function convertForeign(bytes, name = '', { inflateRaw } = {}) {
   if (t0 === '{') {
     let j;
     try { j = JSON.parse(text); } catch { return null; }
+    if (j && j.encrypted === true) throw new Error('BW_ENCRYPTED'); // экспорт Bitwarden с паролем или привязанный к аккаунту
     if (j && Array.isArray(j.items) && ('encrypted' in j || 'folders' in j || 'collections' in j)) return fromBitwardenJSON(j);
     if (j && Array.isArray(j.accounts)) return fromOnePux(j); // распакованный export.data
     return null;
@@ -257,7 +262,7 @@ export async function convertForeign(bytes, name = '', { inflateRaw } = {}) {
   if (/\.json$/i.test(name)) return null;
   const rows = parseCSV(text);
   if (rows.length < 1 || rows[0].length < 3) return null;
-  return fromCSV(rows);
+  return fromCSV(rows, browserName);
 }
 
 /* ───────── экспорт ───────── */

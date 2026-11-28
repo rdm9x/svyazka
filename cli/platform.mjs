@@ -246,7 +246,11 @@ export function defaultSyncDir(home) {
 }
 
 // Язык системы (тег вроде «ru-RU» / «en-AM»): macOS — первый язык из настроек, Windows — локаль пользователя, Linux — LANG
+let sysLang = null;
 export function systemLang() {
+  return (sysLang ??= detectSystemLang()); // один раз на процесс: defaults — это отдельный процесс
+}
+function detectSystemLang() {
   if (MAC) {
     try {
       const m = spawnSync('defaults', ['read', '-g', 'AppleLanguages'], { encoding: 'utf8', timeout: 3000 }).stdout.match(/[A-Za-z]{2,3}(?:-[A-Za-z0-9]+)*/);

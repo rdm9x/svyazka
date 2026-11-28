@@ -83,6 +83,17 @@ test('mcp: добавить с gen, запустить — секрет в вы�
   assert.match(r.structuredContent.output, /pw=••• len=20/);
   assert.equal(r.structuredContent.exitCode, 0);
 
+  // строка — через оболочку (sh -c / cmd.exe), кавычки внутри работают
+  r = await c.tool('svyazka_run', { items: ['VPS/Panel'], command: `"${process.execPath}" -e "console.log('s=' + process.env.SVYAZKA_PASSWORD.length)"` });
+  assert.equal(r.isError, false, r.content[0].text);
+  assert.match(r.structuredContent.output, /s=20/);
+
+  r = await c.tool('svyazka_run', { items: ['VPS/Panel'], env: { X: 'hidden' }, command: [process.execPath, '-e', '1'] });
+  assert.equal(r.isError, true);
+
+  r = await c.tool('svyazka_add', { type: 'password', title: 'Short', fields: { password: 'gen:0' } });
+  assert.equal(r.isError, true);
+
   r = await c.tool('svyazka_run', { items: ['VPS/Panel'], command: [process.execPath, '-e', 'process.exit(3)'] });
   assert.equal(r.isError, true);
   assert.equal(r.structuredContent.exitCode, 3);

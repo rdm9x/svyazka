@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.8.1 — 2026-11-28
+
+Fixes after a full review:
+
+- **Security:** values in `.env` tokens written with quotes (`API_KEY="…"`) were not hidden in `run` output (also
+  through MCP). Now they are.
+- **Security:** hidden notes and 2FA secrets can no longer be passed to commands (`--env X=hidden`), so an agent
+  can't read them in a disguised form.
+- Only one agent per vault: several commands started at once could leave an extra agent running after `svyazka stop`.
+- The app's password form no longer piggybacks on an unlock started elsewhere without checking the password.
+- `svyazka get` on a note works again; `gen:0` is refused (8–256 characters).
+- Import: password-protected Bitwarden exports get a clear message; Bitwarden organisation exports keep collections
+  as shelves; nested KeePassXC groups keep their path; 1Password bank accounts, documents and licences go to hidden
+  notes; items without a title no longer get “undefined”; “Browser” shelf in English.
+- English amounts like `1,200` are read as 1200 (not 1.2); new English vaults default to USD.
+- App: Escape closes dialogs; password and 2FA fields no longer overlap their buttons; theme and language switches fit
+  narrow windows; “1 line” instead of “1 lines”; the 2FA field is labelled “2FA secret”; action errors show a message.
+- MCP: string commands run through the shell correctly on Windows; requests without a method get a proper error.
+- The CLI messages follow the language of the calling terminal even when the agent was started from another one.
+- `curl … | sh` always installs the latest release, even when run inside a clone; updates keep the language you chose.
+
 ## 1.8.0 — 2026-11-28
 
 - **Import from other password managers and browsers**: Bitwarden (`.json`, `.csv`), 1Password (`.1pux`, `.csv`),

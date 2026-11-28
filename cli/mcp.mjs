@@ -80,6 +80,7 @@ function tools(core) {
 }
 
 const SECRET_OK = /^(ask|gen(:\d+)?|@.+)$/;
+const genLen = (v) => { const n = +(v.split(':')[1] || 24); if (n < 8 || n > 256) throw new Error('gen: 8–256'); return n; };
 
 // Поля для агента: секреты — только gen / ask / @файл (как в командной строке)
 function fieldsFor(core, type, raw, t) {
@@ -93,7 +94,7 @@ function fieldsFor(core, type, raw, t) {
       throw new Error(t('Секрет {0} не передаётся текстом: используйте "gen", "ask" или "@путь/к/файлу".', k));
     }
     if (v === 'ask') out[k] = { ask: 1 };
-    else if (/^gen(:\d+)?$/.test(v)) out[k] = { gen: +(v.split(':')[1] || 24) };
+    else if (/^gen(:\d+)?$/.test(v)) out[k] = { gen: genLen(v) };
     else if (v.startsWith('@')) {
       const p = v.slice(1).replace(/^~(?=[/\\])/, os.homedir());
       out[k] = fs.readFileSync(p, 'utf8').replace(/\r?\n$/, '');
@@ -133,11 +134,12 @@ export async function serveMcp({ call, core, t, version, setCaller }) {
       case 'svyazka_run': {
         const items = Array.isArray(a.items) ? a.items.map(String) : [];
         if (!items.length) throw new Error(t('Укажите запись'));
-        const cmd = Array.isArray(a.command) ? a.command.map(String)
-          : process.platform === 'win32' ? ['cmd.exe', '/d', '/s', '/c', String(a.command)] : ['/bin/sh', '-c', String(a.command)];
-        if (!cmd.length || !cmd[0]) throw new Error(t('Нужна команда'));
+        // строка — через оболочку (sh -c, на Windows cmd.exe /d /s /c — кавычки Node расставит сам), массив — напрямую
+        const shell = !Array.isArray(a.command);
+        const cmd = shell ? [String(a.command || '')] : a.command.map(String);
+        if (!cmd.length || !cmd[0].trim()) throw new Error(t('Нужна команда'));
         const cwd = a.cwd ? path.resolve(String(a.cwd)) : process.cwd();
-        const r = await call('run', { refs: items, envmap: a.env || {}, cmd, cwd, env: process.env, sock: process.env.SSH_AUTH_SOCK }, sink);
+        const r = await call('run', { refs: items, envmap: a.env || {}, cmd, shell, cwd, env: process.env, sock: process.env.SSH_AUTH_SOCK }, sink);
         return { exitCode: r.code, output: (r.error ? r.error + '\n' : '') + tail(sink.buf) };
       }
       case 'svyazka_ssh': {
@@ -163,8 +165,9 @@ export async function serveMcp({ call, core, t, version, setCaller }) {
     if (!m || typeof m !== 'object' || Array.isArray(m)) return error(null, -32600, 'Invalid Request');
     const { id, method, params = {} } = m;
     const isRequest = id !== undefined && id !== null;
+    if (typeof method !== 'string') return isRequest ? error(id, -32600, 'Invalid Request') : undefined;
     const p = (async () => {
-      if (method === 'initialize') {
+      if (method === 'initialize' && isRequest) {
         const name = String(params.clientInfo?.name || 'MCP').replace(/[^\p{L}\p{N} ._-]/gu, '').slice(0, 40) || 'MCP';
         setCaller('MCP: ' + name);
         const v = PROTOCOLS.includes(params.protocolVersion) ? params.protocolVersion : PROTOCOLS[0];

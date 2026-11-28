@@ -38,9 +38,13 @@ test('import Bitwarden → скрытые поля не показываются
 
   // get без поля: первый заполненный секрет
   assert.equal(s.run(['get', 'Panel']).stdout.trim(), 'pw-secret-555');
-  // run: скрытая заметка тоже вычищается из вывода
-  r = s.run(['run', 'Panel', '--env', 'H=hidden', '--', process.execPath, '-e', 'console.log(process.env.H)']);
-  assert.equal(r.stdout.trim(), '•••');
+  // скрытая заметка и секрет 2FA в команды не отдаются
+  for (const f of ['hidden', 'totp']) {
+    r = s.run(['run', 'Panel', '--env', 'H=' + f, '--', process.execPath, '-e', 'console.log(process.env.H)']);
+    assert.notEqual(r.status, 0);
+    assert.match(r.stderr, /only a person/);
+    assert.doesNotMatch(r.stdout, /recovery-code-777|JBSWY3DP/);
+  }
 
   const out = path.join(s.home, 'out.csv');
   // ответ на подтверждение задаёт окружение агента — перезапускаем его с отказом

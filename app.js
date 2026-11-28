@@ -1,6 +1,7 @@
 // Связка — ключи, пароли и оплаты. Всё шифруется на устройстве, сети не нужно.
 
 import { convertForeign, toCSV, toBitwarden } from './importers.js';
+import { normAmount } from './core.js';
 import { ITER, uid, rand, deriveKey, seal, openVault, decryptWith, importRaw, b64d, newVault, normalize, mergeData, tombstone, isVaultBlob, isPlainImport,
   addMonths, todayISO, markPaid, planPlainImport } from './core.js';
 import { makeT, setLang, lang, langFromTag, locale, plural } from './i18n.js';
@@ -20,7 +21,7 @@ const t = makeT({ en: EN });
   document.title = t('Связка');
 }
 
-const VERSION = '1.8.0';
+const VERSION = '1.8.1';
 
 const $ = (s, r = document) => r.querySelector(s);
 const app = $('#app');
@@ -191,7 +192,7 @@ const TYPES = {
     { k: 'login', l: t('Логин / e-mail'), al: t('Логин') },
     { k: 'password', l: t('Пароль'), secret: 1, gen: 1, mono: 1 },
     { k: 'url', l: t('Адрес'), url: 1, ph: 'https://' },
-    { k: 'totp', l: t('Код 2FA (TOTP)'), secret: 1, mono: 1, ph: 'otpauth://totp/…' },
+    { k: 'totp', l: t('Секрет 2FA (TOTP)'), secret: 1, mono: 1, ph: 'otpauth://totp/…' },
     { k: 'note', l: t('Заметка'), multi: 1 },
     HIDDEN,
   ] },
@@ -347,7 +348,7 @@ function linkify(v) {
   return href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(s)}</a>` : esc(s);
 }
 
-const maskOf = (v, f) => (f.multi ? `•••••••• <em>${t('{0} стр.', v.split('\n').length)}</em>` : '••••••••••');
+const maskOf = (v, f) => (f.multi ? `•••••••• <em>${plural(v.split('\n').length, ['стр.', 'стр.', 'стр.'], ['line', 'lines'])}</em>` : '••••••••••');
 
 function viewField(it, f) {
   const v = it.f[f.k];
@@ -567,7 +568,7 @@ function vItem(it) {
       <div><h1>${esc(it.title)}</h1><small class="muted">${ty.label}${sh ? ' · ' + esc(sh.name) : ''}</small></div>
     </div>
     <div class="actions">
-      <button class="btn glass" data-act="copy-access" data-id="${it.id}">${ic(I.copy)} ${it.type === 'payment' ? t('Скопировать реквизиты') : it.type === 'note' ? t('Скопировать заметку') : t('Скопировать доступ')}</button>
+      ${it.type === 'note' && !it.f.text ? '' : `<button class="btn glass" data-act="copy-access" data-id="${it.id}">${ic(I.copy)} ${it.type === 'payment' ? t('Скопировать реквизиты') : it.type === 'note' ? t('Скопировать заметку') : t('Скопировать доступ')}</button>`}
     </div>
     ${body}
     <p class="foot muted">${t('Изменено {0}', fmtDateTime(it.updated))}</p>`;
@@ -798,7 +799,10 @@ function modal({ title, text = '', fields = [], ok = 'OK', cancel = t('Отме�
     document.body.append(el);
     const form = el.querySelector('form');
     const err = el.querySelector('.err');
-    const close = (v) => { el.classList.add('out'); setTimeout(() => el.remove(), 180); resolve(v); };
+    const close = (v) => { document.removeEventListener('keydown', onKey); el.classList.add('out'); setTimeout(() => el.remove(), 180); resolve(v); };
+    // Escape закрывает окно, где бы ни был фокус
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(null); } };
+    document.addEventListener('keydown', onKey);
     el.addEventListener('click', (e) => {
       if (e.target.closest('[data-alt]')) return close({ _alt: true });
       if (e.target === el || e.target.closest('[data-x]')) close(null);
@@ -858,6 +862,7 @@ function pickFile() {
     const i = document.createElement('input');
     i.type = 'file'; i.accept = '.json,.csv,.1pux,application/json,text/csv'; i.hidden = true;
     i.onchange = () => { resolve(i.files[0] || null); i.remove(); };
+    i.addEventListener('cancel', () => { resolve(null); i.remove(); });
     document.body.append(i);
     i.click();
   });
@@ -931,7 +936,7 @@ async function onLockSubmit(form) {
       await openRaw(r);
     } else {
       const salt = rand(16);
-      S = { key: await deriveKey(pw, salt, ITER), salt, iter: ITER, data: newVault() };
+      S = { key: await deriveKey(pw, salt, ITER), salt, iter: ITER, data: newVault(lang() === 'en' ? 'USD' : 'RUB') };
       await save();
     }
     normalize(S.data);
@@ -959,7 +964,7 @@ async function saveItem(form) {
 
   if (type === 'payment') {
     f.autoRenew = fd.has('f.autoRenew');
-    f.amount = (f.amount || '').replace(',', '.').replace(/[^\d.]/g, '');
+    f.amount = normAmount(f.amount);
     f.period = +f.period;
     f.remind = f.remind === '' ? 7 : Math.max(0, parseInt(f.remind, 10) || 0);
     if (f.nextDate) {
@@ -1034,7 +1039,7 @@ async function importBackup() {
   if (!isPlainImport(blob) && !isVaultBlob(blob)) {
     // Bitwarden, 1Password, KeePassXC, браузеры → открытый формат импорта
     let conv;
-    try { conv = await convertForeign(bytes, file.name, { inflateRaw }); }
+    try { conv = await convertForeign(bytes, file.name, { inflateRaw, browserName: t('Браузер') }); }
     catch (e) { return toast(e.message === 'BW_ENCRYPTED' ? t('Это зашифрованный экспорт Bitwarden — выгрузите заново в формате «.json» без пароля') : t('Не удалось прочитать файл')); }
     if (!conv) return toast(t('Не узнаю формат файла'));
     return importPlain(conv.data, conv);
@@ -1090,7 +1095,7 @@ async function importPlain(src, conv = null) {
     title: t('Импорт: {0}', nItems(items.length)),
     text: [conv ? t('Из {0}:', conv.source) : '', byType + '.',
       conv && Object.keys(conv.skipped).length ? t('Не переносятся (карты, документы и т. п.): {0}.', Object.values(conv.skipped).reduce((a, b) => a + b, 0)) : '',
-      conv ? t('Заметки и коды 2FA лягут в скрытые поля.') : '', newShelves ? t('Новых полок: {0}.', newShelves) : '', skipped ? t('Пропущено (дубли или пустые): {0}.', skipped) : ''].filter(Boolean).join(' '),
+      conv ? t('Заметки лягут в скрытые заметки, секреты 2FA — в поле 2FA.') : '', newShelves ? t('Новых полок: {0}.', newShelves) : '', skipped ? t('Пропущено (дубли или пустые): {0}.', skipped) : ''].filter(Boolean).join(' '),
     ok: t('Добавить'),
   });
   if (!ok) return;
@@ -1228,7 +1233,8 @@ app.addEventListener('click', async (e) => {
   const el = e.target.closest('[data-act]');
   if (!el || !A[el.dataset.act]) return;
   e.preventDefault();
-  await A[el.dataset.act](el, e);
+  // ошибка действия (агент недоступен, файл не сохранился) — не молча
+  try { await A[el.dataset.act](el, e); } catch (err) { toast(err?.message || t('Не получилось')); }
 });
 app.addEventListener('submit', (e) => {
   e.preventDefault();

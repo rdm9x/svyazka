@@ -156,7 +156,7 @@ foreach ($agent in @('.claude', '.codex')) {
 Ok "$(M 'навык svyazka' 'svyazka skill') → ~\.claude\skills$(if (Test-Path (Join-Path $HOME '.codex')) { ' + ~\.codex\skills' })"
 
 # обновление: прежний интерфейс был только русским — закрепляем его, пока язык не выбрали явно
-if (Test-Path (Join-Path $Dir 'vault.json')) { & $node (Join-Path $App 'cli\svyazka.mjs') config lang ru --if-unset *> $null }
+if (Test-Path (Join-Path $Dir 'vault.json')) { & $node (Join-Path $App 'cli\svyazka.mjs') config lang $script:IL --if-unset *> $null }
 $env:SVYAZKA_LANG = $script:IL
 & $node (Join-Path $App 'cli\agent-rules.mjs') install
 

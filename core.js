@@ -83,10 +83,21 @@ export const isPlainImport = (b) => !!(b && b.format === 'svyazka-import');
 
 /* ───────── данные ───────── */
 
-export const newVault = () => normalize({ v: 1, shelves: [], items: [], deleted: [], settings: { autoLock: 5, currency: 'RUB' }, meta: { created: Date.now(), lastBackup: 0 } });
+// Сумма из ввода: «1 990,50», «1,200» (тысячи), «4.51», «1.200,50» → строка с точкой
+export function normAmount(v) {
+  let x = String(v ?? '').replace(/[\s\u00a0']/g, '');
+  if (x.includes(',') && x.includes('.')) x = x.lastIndexOf(',') > x.lastIndexOf('.') ? x.replace(/\./g, '').replace(',', '.') : x.replace(/,/g, '');
+  else if (/,\d{3}$/.test(x) && !/,\d{1,2}$/.test(x)) x = x.replace(/,/g, '');
+  else x = x.replace(',', '.');
+  return x.replace(/[^\d.]/g, '');
+}
+
+export const newVault = (currency = 'RUB') => normalize({ v: 1, shelves: [], items: [], deleted: [], settings: { autoLock: 5, currency }, meta: { created: Date.now(), lastBackup: 0 } });
 
 export function normalize(d) {
   d.shelves ||= [];
+  // цвет полки идёт в style — только #rrggbb (данные могли прийти из чужого бэкапа)
+  for (const sh of d.shelves) if (!/^#[0-9a-f]{6}$/i.test(sh.color || '')) sh.color = '#a3aec2';
   d.items ||= [];
   d.deleted ||= [];
   d.settings = { autoLock: 5, currency: 'RUB', ...(d.settings || {}) };
@@ -209,7 +220,7 @@ export function itemFromImport(raw, shelfId, defaultCurrency = 'RUB') {
   const f = {};
   if (type === 'payment') {
     const p = +raw.period;
-    f.amount = s(raw.amount).replace(',', '.').replace(/[^\d.]/g, '');
+    f.amount = normAmount(raw.amount);
     f.currency = s(raw.currency).toUpperCase() || defaultCurrency;
     f.period = PERIOD_MONTHS.includes(p) ? p : 1;
     f.nextDate = iso(raw.nextDate);

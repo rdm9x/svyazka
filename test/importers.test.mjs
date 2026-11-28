@@ -113,7 +113,7 @@ test('KeePassXC, 1Password CSV, Safari, Chrome, Firefox', async () => {
   let r = await conv('"Group","Title","Username","Password","URL","Notes","TOTP","Icon","Last Modified","Created"\n'
     + '"Root/Servers/Prod","db","admin","pw","https://db.example.com","note","otpauth://totp/a?secret=X","0","",""\n');
   assert.equal(r.source, 'KeePassXC');
-  assert.equal(all(r)[0].shelf, 'Prod');
+  assert.equal(all(r)[0].shelf, 'Servers · Prod');
   assert.equal(all(r)[0].totp, 'otpauth://totp/a?secret=X');
 
   r = await conv('Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes\nMail,https://mail.example.com,me,pw,,false,false,,n\n');
@@ -159,4 +159,21 @@ test('выгрузка: Bitwarden JSON и CSV читаются обратно', 
   assert.equal(c.length, 1);
   assert.equal(c[0].shelf, 'VPS');
   assert.equal(c[0].password, 'pw');
+});
+
+test('крайние случаи: пустые поля, коллекции Bitwarden, корень KeePassXC, только заголовок', async () => {
+  let r = await conv(JSON.stringify({ encrypted: false, folders: null, items: [{ type: 1, name: null, notes: null, fields: null, login: { username: null, password: 'p', uris: null, totp: null } }] }), 'x.json');
+  assert.equal(all(r)[0].title, 'Bitwarden');
+  r = await conv(JSON.stringify({ encrypted: false, collections: [{ id: 'c', name: 'Team' }], items: [{ type: 1, name: 'org', collectionIds: ['c'], login: { username: 'u', password: 'p' } }] }), 'x.json');
+  assert.equal(all(r)[0].shelf, 'Team');
+  r = await conv('"Group","Title","Username","Password","URL","Notes","TOTP","Icon","Last Modified","Created"\r\n"Root","t","u","p","","","","0","",""\r\n');
+  assert.equal(all(r)[0].shelf, 'KeePassXC');
+  r = await conv('name,url,username,password,note\r\n');
+  assert.equal(all(r).length, 0);
+});
+
+test('Bitwarden с паролем — понятная ошибка; имя полки для браузера задаётся', async () => {
+  await assert.rejects(conv(JSON.stringify({ encrypted: true, passwordProtected: true, salt: 'x', data: 'y' }), 'bw.json'), /BW_ENCRYPTED/);
+  const r = await convertForeign('name,url,username,password\nA,https://a.example,u,p\n', 'c.csv', { browserName: 'Browser' });
+  assert.equal(r.source, 'Browser');
 });

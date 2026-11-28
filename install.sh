@@ -120,7 +120,7 @@ install_here() {
 
   SVYAZKA_NODE_BIN="$NODE" sh "$DEST/cli/install.sh" >/dev/null
   # обновление: прежний интерфейс был только русским — закрепляем его, пока язык не выбрали явно
-  [ -f "$HOME/.svyazka/vault.json" ] && "$NODE" "$DEST/cli/svyazka.mjs" config lang ru --if-unset >/dev/null 2>&1 || true
+  [ -f "$HOME/.svyazka/vault.json" ] && "$NODE" "$DEST/cli/svyazka.mjs" config lang "$IL" --if-unset >/dev/null 2>&1 || true
   ok "$(m "команда svyazka" "svyazka command") → ~/.local/bin/svyazka"
   ok "$(m "навык svyazka" "svyazka skill") → ~/.claude/skills$( [ -d "$HOME/.codex" ] && printf ' + ~/.codex/skills')"
 
@@ -155,5 +155,6 @@ install_here() {
   fi
 }
 
-SRC="$(cd "$(dirname "$0")" 2>/dev/null && pwd || true)"
+# curl | sh: $0 — это «sh», а не файл; тогда всегда качаем релиз (а не ставим то, что лежит в текущей папке)
+case "$(basename -- "$0")" in install.sh) SRC="$(cd "$(dirname "$0")" 2>/dev/null && pwd || true)" ;; *) SRC="" ;; esac
 if [ -f "$SRC/cli/svyazka.mjs" ] && [ -f "$SRC/install.sh" ]; then install_here; else bootstrap; fi
