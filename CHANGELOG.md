@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.0 — 2026-11-28
+
+- **MCP server** `svyazka mcp` for Cursor, Claude Desktop, Gemini CLI and other agents: list, find and show items,
+  run commands and SSH with secrets (output redacted), save new secrets (`gen` / `ask` / `@file`), payments.
+  No tool returns a secret value. `svyazka mcp config` prints the snippet for the client's settings.
+- The audit log and dialogs name the MCP client (`MCP: Cursor`).
+
 ## 1.6.0 — 2026-11-28
 
 - **English interface**: the app window, the `svyazka` command and its help, system dialogs, the Mac app menu, the
@@ -63,6 +70,5 @@ First public release.
 
 ## Planned
 
-- MCP server (`svyazka mcp`) for Cursor, Gemini CLI, Claude Desktop and other agents.
 - Import from Bitwarden, 1Password, KeePassXC, browser exports; export back.
 - TOTP (2FA) codes; macOS notifications for upcoming payments; Homebrew tap; signed and notarized builds.

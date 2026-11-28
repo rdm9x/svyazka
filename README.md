@@ -95,6 +95,7 @@ Open **Svyazka** from Spotlight (Mac) or the Start menu (Windows), or run `svyaz
 | `svyazka sync`, `config sync-dir <folder>` | encrypted backup and merge between your computers |
 | `svyazka import <file>` | a Svyazka backup (merge) or plain JSON in the [import format](IMPORT.md) |
 | `svyazka log`, `status`, `lock` | audit log, state, lock now |
+| `svyazka mcp`, `mcp config` | MCP server for Cursor, Claude Desktop, Gemini CLI; the snippet for their settings |
 | `svyazka config lang en\|ru\|auto` | interface language (auto — by the system) |
 
 Item types: `password`, `ssh`, `token` (a value or a whole `.env`), `payment`, `note`. `svyazka help` for details.
@@ -103,6 +104,25 @@ Item types: `password`, `ssh`, `token` (a value or a whole `.env`), `payment`, `
 
 Codex runs commands in a sandbox that blocks the Svyazka agent socket. The skill tells Codex to ask you to run
 `svyazka` outside the sandbox — approve it (you can allow it permanently).
+
+### Cursor, Claude Desktop, Gemini CLI and other agents (MCP)
+
+`svyazka mcp` is an MCP server with the same rules: the agent can list and search items, run commands and SSH with
+secrets, save new secrets (`gen`, `ask` or `@file` only) and see payments — there is no tool that returns a value.
+Print the settings snippet and paste it into the client's MCP config:
+
+```bash
+svyazka mcp config
+```
+
+| Client | Where |
+|---|---|
+| Cursor | `~/.cursor/mcp.json` |
+| Claude Desktop | Settings → Developer → Edit Config (`claude_desktop_config.json`) |
+| Gemini CLI | `~/.gemini/settings.json` |
+| Claude Code | not needed — it uses the skill; or `claude mcp add svyazka -- svyazka mcp` |
+
+The log shows such calls as `MCP: <client name>`.
 
 ## How the AI doesn't see your keys
 
@@ -139,8 +159,7 @@ Read [SECURITY.md](SECURITY.md) for the full threat model. In short:
 
 ## Status
 
-macOS, Windows and Linux. English and Russian interface (by your system language; `svyazka config lang en|ru` or Settings → Language); an MCP server for other agents is planned —
-see the [changelog](CHANGELOG.md). Windows dialogs and Windows Hello are tested by CI only up to the point where a
+macOS, Windows and Linux. English and Russian interface (by your system language; `svyazka config lang en|ru` or Settings → Language). See the [changelog](CHANGELOG.md). Windows dialogs and Windows Hello are tested by CI only up to the point where a
 person has to click — feedback from Windows users is very welcome. Contributions welcome: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Uninstall

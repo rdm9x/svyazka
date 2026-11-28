@@ -95,6 +95,7 @@ powershell -ExecutionPolicy Bypass -File $env:TEMP\svyazka-install.ps1
 | `svyazka sync`, `config sync-dir <папка>` | зашифрованный бэкап и слияние между вашими компьютерами |
 | `svyazka import <файл>` | бэкап Связки (слияние) или открытый JSON в [формате импорта](IMPORT.md) |
 | `svyazka log`, `status`, `lock` | журнал, состояние, закрыть сейчас |
+| `svyazka mcp`, `mcp config` | MCP-сервер для Cursor, Claude Desktop, Gemini CLI; строка для их настроек |
 | `svyazka config lang ru\|en\|auto` | язык интерфейса (auto — по системе) |
 
 Типы записей: `password`, `ssh`, `token` (значение или целый `.env`), `payment`, `note`. Подробно — `svyazka help`.
@@ -103,6 +104,25 @@ powershell -ExecutionPolicy Bypass -File $env:TEMP\svyazka-install.ps1
 
 Codex выполняет команды в песочнице, которая не пускает к агенту Связки. Навык велит Codex попросить у вас разрешение
 запустить `svyazka` вне песочницы — разрешите (можно насовсем).
+
+### Cursor, Claude Desktop, Gemini CLI и другие агенты (MCP)
+
+`svyazka mcp` — MCP-сервер с теми же правилами: агент может смотреть и искать записи, запускать команды и SSH
+с секретами, сохранять новые секреты (только `gen`, `ask` или `@файл`) и видеть оплаты — инструмента, который
+возвращает значение, нет. Выведите строку для настроек и вставьте её в MCP-конфиг клиента:
+
+```bash
+svyazka mcp config
+```
+
+| Клиент | Куда |
+|---|---|
+| Cursor | `~/.cursor/mcp.json` |
+| Claude Desktop | Settings → Developer → Edit Config (`claude_desktop_config.json`) |
+| Gemini CLI | `~/.gemini/settings.json` |
+| Claude Code | не нужно — работает через навык; или `claude mcp add svyazka -- svyazka mcp` |
+
+В журнале такие обращения подписаны `MCP: <имя клиента>`.
 
 ## Как нейронка не видит ключи
 
@@ -138,8 +158,7 @@ Codex выполняет команды в песочнице, которая н
 
 ## Статус
 
-macOS, Windows и Linux. Интерфейс на русском и английском (по языку системы; `svyazka config lang ru|en` или Настройки → Язык), дальше — MCP-сервер для других агентов,
-см. [CHANGELOG](CHANGELOG.md). Окна Windows и Windows Hello CI проверяет только до момента, где нужен человек, —
+macOS, Windows и Linux. Интерфейс на русском и английском (по языку системы; `svyazka config lang ru|en` или Настройки → Язык), см. [CHANGELOG](CHANGELOG.md). Окна Windows и Windows Hello CI проверяет только до момента, где нужен человек, —
 отзывы пользователей Windows очень пригодятся. Помощь приветствуется: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Удаление

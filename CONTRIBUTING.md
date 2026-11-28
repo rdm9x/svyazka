@@ -12,6 +12,7 @@ end to end.
 | `core.js` | vault format, encryption, merge, import, payments — shared by the UI and the CLI |
 | `app.js`, `styles.css`, `index.html` | desktop UI (served by the agent, shown in `Связка.app` / `svyazka ui`) |
 | `cli/svyazka.mjs` | the `svyazka` command and the background agent |
+| `cli/mcp.mjs` | `svyazka mcp` — MCP server (stdio) on top of the agent |
 | `cli/platform.mjs` | everything OS-specific: dialogs, Touch ID / Windows Hello, clipboard, opening the UI |
 | `cli/touchid.swift` | Touch ID confirmation helper |
 | `cli/mac-app/` | `Связка.app` (WebKit window) and its icon |

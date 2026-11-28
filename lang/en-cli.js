@@ -228,4 +228,9 @@ export default {
   '  svyazka ui                              открыть интерфейс Связки в браузере': '  svyazka ui                              open the Svyazka interface in the browser',
   '  svyazka log [N]                         журнал действий': '  svyazka log [N]                         activity log',
   '  <запись> — название, часть названия или «Полка/Название». --json — вывод в JSON.': '  <record> — a title, part of a title or "Shelf/Title". --json — JSON output.',
+  "svyazka mcp [config]": "svyazka mcp [config]",
+  "  svyazka mcp [config]                    MCP-сервер для Cursor, Claude Desktop, Gemini CLI; config — строка для их настроек": "  svyazka mcp [config]                    MCP server for Cursor, Claude Desktop, Gemini CLI; config — snippet for their settings",
+  "Секрет {0} не передаётся текстом: используйте \"gen\", \"ask\" или \"@путь/к/файлу\".": "Secret {0} cannot be passed as text: use \"gen\", \"ask\" or \"@path/to/file\".",
+  "Нужна команда": "A command is required",
+  "…(начало вывода обрезано)…": "…(beginning of output cut)…",
 };

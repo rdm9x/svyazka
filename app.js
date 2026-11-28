@@ -19,7 +19,7 @@ const t = makeT({ en: EN });
   document.title = t('Связка');
 }
 
-const VERSION = '1.6.0';
+const VERSION = '1.7.0';
 
 const $ = (s, r = document) => r.querySelector(s);
 const app = $('#app');

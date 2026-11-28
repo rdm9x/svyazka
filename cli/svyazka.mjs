@@ -349,7 +349,7 @@ function runAgent() {
     fs.appendFileSync(LOG, `${ts} | ${caller} | ${op}${what ? ' | ' + what : ''}${extra ? ' | ' + extra : ''}\n`, { mode: 0o600 });
   };
   const label = (it) => `${shelfName(it.shelfId)}/${it.title}`;
-  const who = (c) => ({ Claude: 'Claude Code', Codex: 'Codex' })[c] || t('Терминал');
+  const who = (c) => ({ Claude: 'Claude Code', Codex: 'Codex' })[c] || (String(c).startsWith('MCP: ') ? String(c).slice(5) : t('Терминал'));
 
   async function openForeign(blob, purpose) {
     if (st.key && blob.salt === st.saltB64) return core.decryptWith(blob, st.key);
@@ -748,7 +748,9 @@ function runAgent() {
       const op = ops[req.op];
       try {
         if (!op) fail(t('Неизвестная операция {0}', req.op));
-        const who = ['Claude', 'Codex'].includes(req.caller) ? req.caller : t('терминал');
+        // кто спрашивает — со слов клиента, только для журнала и текста окон: Claude, Codex, «MCP: <клиент>» или терминал
+        const mcp = typeof req.caller === 'string' && /^MCP: [\p{L}\p{N} ._-]{1,40}$/u.test(req.caller);
+        const who = ['Claude', 'Codex'].includes(req.caller) || mcp ? req.caller : t('терминал');
         const result = await answers.run({ ...(req.answers || {}) }, () => op(req.args || {}, who, conn));
         send(conn, { type: 'done', ok: true, result });
       } catch (e) {
@@ -786,7 +788,7 @@ const writeJSON = (p, v) => fs.writeFileSync(p, JSON.stringify(v, null, 1), { mo
 /* ═════════════════════════ клиент ═════════════════════════ */
 
 // Кто вызвал: Claude Code, Codex или человек в терминале — для окон подтверждения и журнала.
-const caller = (() => {
+let caller = (() => {
   if (process.env.CLAUDECODE) return 'Claude';
   if (Object.keys(process.env).some((k) => k.startsWith('CODEX_'))) return 'Codex';
   for (const name of sys.parentNames()) {
@@ -830,7 +832,8 @@ function ttyAsk(question) {
   });
 }
 
-async function callOnce(op, args, ans) {
+// sink — куда идёт вывод run (по умолчанию в терминал; MCP-сервер собирает его в ответ)
+async function callOnce(op, args, ans, sink) {
   const c = await ensureAgent();
   return new Promise((res, rej) => {
     let buf = '';
@@ -841,8 +844,8 @@ async function callOnce(op, args, ans) {
       while ((i = buf.indexOf('\n')) >= 0) {
         const m = JSON.parse(buf.slice(0, i));
         buf = buf.slice(i + 1);
-        if (m.type === 'out') process.stdout.write(m.data);
-        else if (m.type === 'err') process.stderr.write(m.data);
+        if (m.type === 'out') sink ? sink.out(m.data) : process.stdout.write(m.data);
+        else if (m.type === 'err') sink ? sink.err(m.data) : process.stderr.write(m.data);
         else if (m.type === 'done') m.ok ? res(m.result) : rej(new UserError(m.error, m.code, m.extra));
       }
     });
@@ -853,10 +856,10 @@ async function callOnce(op, args, ans) {
 }
 
 // Окон нет (SSH, сервер) — агент просит ввод, спрашиваем в терминале и повторяем запрос.
-async function call(op, args = {}) {
+async function call(op, args = {}, sink) {
   const ans = {};
   for (let tries = 0; ; tries++) {
-    try { return await callOnce(op, args, ans); }
+    try { return await callOnce(op, args, ans, sink); }
     catch (e) {
       const retry = e.code === 'NEED_INPUT' || (e.code === 'BAD_PASSWORD' && 'password' in ans);
       if (!retry || tries > 6) throw e;
@@ -951,6 +954,7 @@ const help = () => [
   t('  svyazka config quick-unlock on|off      открывать Связку по Touch ID / Windows Hello (по умолчанию включено)'),
   t('  svyazka config lang ru|en|auto          язык сообщений (auto — как в системе)'),
   t('  svyazka ui                              открыть интерфейс Связки в браузере'),
+  t('  svyazka mcp [config]                    MCP-сервер для Cursor, Claude Desktop, Gemini CLI; config — строка для их настроек'),
   t('  svyazka log [N]                         журнал действий'),
   '',
   t('  <запись> — название, часть названия или «Полка/Название». --json — вывод в JSON.'),
@@ -1099,6 +1103,13 @@ async function main() {
       if (args.includes('--print')) return console.log(r.url);
       sys.openUrl(r.url);
       return console.log(t('Интерфейс открыт в браузере (адрес работает только на этом компьютере, пока запущен агент)'));
+    }
+    case 'mcp': {
+      const mcp = await import('./mcp.mjs');
+      if (args[0] === 'config') return console.log(JSON.stringify(mcp.clientConfig(SCRIPT), null, 2));
+      if (args[0]) fail(t('svyazka mcp [config]'));
+      const version = JSON.parse(fs.readFileSync(path.join(WEBROOT, 'package.json'), 'utf8')).version;
+      return mcp.serveMcp({ call, core, t, version, setCaller: (c) => { caller = c; } });
     }
     case 'log': return console.log(await call('log', { n: +args[0] || 30 }));
     default:
