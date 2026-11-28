@@ -27,6 +27,9 @@ svyazka add token "Cloudflare API" --shelf my-app --value ask   # значени
 
 ## Что умеет
 
+- **Ключ в строке меню** (macOS) — значок у часов мигает, когда нейросеть берёт ключ (сиреневым) или сохраняет
+  новый (зелёным); по клику — последние действия агентов, открыть или заблокировать Связку. Закрытое окно оставляет
+  Связку там.
 - **Приложение** — `Связка.app` на Mac, ярлык в меню «Пуск» на Windows (окно Edge), `svyazka ui` на Linux. Полки (проект или сервер), пароли, SSH-ключи, токены, заметки и ближайшие оплаты серверов,
   доменов и подписок. Три колонки, тёмная и светлая темы, ⌘F / ⌘N / ⌘L.
 - **Команда `svyazka` и агент** — ключ держится в памяти, как у `ssh-agent`; через 30 минут без дела Связка закрывается.
@@ -169,7 +172,7 @@ macOS, Windows и Linux. Интерфейс на русском и англий�
 ```bash
 $(command -v node || echo ~/.svyazka/node/bin/node) ~/.svyazka/app/cli/agent-rules.mjs remove
 rm -f ~/.local/bin/svyazka ~/.claude/skills/svyazka ~/.codex/skills/svyazka
-rm -rf ~/Applications/Связка.app ~/.svyazka/app ~/.svyazka/node
+rm -rf ~/Applications/Связка.app ~/.svyazka/app ~/.svyazka/node ~/Library/LaunchAgents/local.svyazka.menubar.plist
 ```
 Windows: `node $HOME\.svyazka\app\cli\agent-rules.mjs remove`, затем удалить `~\.svyazka\app`, `~\.svyazka\bin`, `~\.svyazka\node`,
 `~\.claude\skills\svyazka`, `~\.codex\skills\svyazka` и ярлык «Связка» в меню «Пуск».

@@ -29,7 +29,7 @@ build() { # name, sources…, -- флаги
 }
 
 build svyazka-touchid "$HERE/touchid.swift"
-build Svyazka "$HERE/mac-app/main.swift" -framework Cocoa -framework WebKit
+build Svyazka "$HERE/mac-app/main.swift" "$HERE/mac-app/menubar.swift" -framework Cocoa -framework WebKit
 
 # иконка
 swift "$HERE/mac-app/make-icon.swift" "$B/icon-1024.png" 1024   # иконка macOS: поля и тень уже в рисунке

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.0 — 2026-11-28
+
+- **Key in the macOS menu bar**: blinks when an AI agent uses a key (lavender: command, SSH, reveal, copy) or saves
+  one (green); its menu shows the latest agent actions, opens or locks Svyazka. Closing the window keeps Svyazka in the
+  menu bar without a Dock icon; it starts at login with the icon only (toggle in the menu).
+- **Compact window**: 960×620 by default, narrower columns, denser rows; the background now runs under the title bar.
+- When the window is closed, the page is unloaded — the decrypted vault does not stay in memory.
+
 ## 1.8.2 — 2026-11-28
 
 - **New icon**: a classic key on a dark blue glass square — the Mac app, the Windows shortcut, the browser tab, and

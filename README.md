@@ -27,6 +27,8 @@ Every access is logged with who did it — you, Claude or Codex.
 
 ## Features
 
+- **Menu bar key** (macOS) — a key icon next to the clock that blinks when an AI agent uses a key (lavender) or saves
+  one (green); click it for the latest agent actions, open or lock Svyazka. Closing the window keeps it there.
 - **Desktop app** — `Связка.app` on macOS, a Start-menu app on Windows (Edge app window), `svyazka ui` on Linux. Shelves (one per project or server), passwords, SSH keys, tokens, notes, upcoming payments for
   servers, domains and subscriptions. Three-pane layout, dark and light themes, ⌘F / ⌘N / ⌘L.
 - **`svyazka` CLI + agent** — the key stays in memory like `ssh-agent`, auto-locks after 30 min idle.
@@ -170,7 +172,7 @@ person has to click — feedback from Windows users is very welcome. Contributio
 ```bash
 $(command -v node || echo ~/.svyazka/node/bin/node) ~/.svyazka/app/cli/agent-rules.mjs remove
 rm -f ~/.local/bin/svyazka ~/.claude/skills/svyazka ~/.codex/skills/svyazka
-rm -rf ~/Applications/Связка.app ~/.svyazka/app ~/.svyazka/node
+rm -rf ~/Applications/Связка.app ~/.svyazka/app ~/.svyazka/node ~/Library/LaunchAgents/local.svyazka.menubar.plist
 ```
 Windows: `node $HOME\.svyazka\app\cli\agent-rules.mjs remove`, then delete `~\.svyazka\app`, `~\.svyazka\bin`, `~\.svyazka\node`,
 `~\.claude\skills\svyazka`, `~\.codex\skills\svyazka` and the «Связка» Start-menu shortcut.
