@@ -24,7 +24,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
     self.open = open; self.lock = lock
     super.init()
     item.button?.image = Self.keyImage(color: nil, dot: false)
-    item.button?.toolTip = L("Связка", "Svyazka")
+    item.button?.toolTip = L("Связка", "Keyhandoff")
     let menu = NSMenu()
     menu.delegate = self
     item.menu = menu
@@ -69,7 +69,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
         guard pr.terminationStatus != 0 else { self.update = nil; self.item.button?.image = self.icon(nil); return }
         let text = (try? String(contentsOf: log, encoding: .utf8)) ?? ""
         let a = NSAlert()
-        a.messageText = L("Не удалось обновить Связку", "Couldn't update Svyazka")
+        a.messageText = L("Не удалось обновить Связку", "Couldn't update Keyhandoff")
         a.informativeText = String(text.suffix(600))
         a.runModal()
       }
@@ -123,7 +123,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
   static func describe(_ e: Event) -> String {
     let verb: String
     switch e.op {
-    case "run": verb = L("взял для команды", "used in a command")
+    case "run": verb = L("использовал в команде", "used in a command")
     case "ssh": verb = L("подключился по SSH", "connected over SSH")
     case "get": verb = L("показал", "revealed")
     case "copy": verb = L("скопировал", "copied")
@@ -171,7 +171,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
       return true
     }
     img.isTemplate = color == nil
-    img.accessibilityDescription = L("Связка", "Svyazka")
+    img.accessibilityDescription = L("Связка", "Keyhandoff")
     return img
   }
 
@@ -180,7 +180,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
   func menuNeedsUpdate(_ menu: NSMenu) {
     menu.removeAllItems()
     if let v = update {
-      let u = menu.addItem(withTitle: updating ? L("Обновляется…", "Updating…") : L("Обновить Связку до \(v)", "Update Svyazka to \(v)"), action: updating ? nil : #selector(doUpdate), keyEquivalent: "")
+      let u = menu.addItem(withTitle: updating ? L("Обновляется…", "Updating…") : L("Обновить Связку до \(v)", "Update Keyhandoff to \(v)"), action: updating ? nil : #selector(doUpdate), keyEquivalent: "")
       u.target = self
       u.isEnabled = !updating
       menu.addItem(.separator())
@@ -188,7 +188,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
     let head = menu.addItem(withTitle: L("Агенты и ключи", "Agents and keys"), action: nil, keyEquivalent: "")
     head.isEnabled = false
     if events.isEmpty {
-      menu.addItem(withTitle: L("Пока ничего не брали", "Nothing used yet"), action: nil, keyEquivalent: "").isEnabled = false
+      menu.addItem(withTitle: L("Агенты ещё ничего не использовали", "No agent activity yet"), action: nil, keyEquivalent: "").isEnabled = false
     } else {
       let f = DateFormatter(); f.dateFormat = Calendar.current.isDateInToday(events.last!.date) ? "HH:mm" : "d MMM, HH:mm"
       for e in events.reversed() {
@@ -198,16 +198,16 @@ final class MenuBar: NSObject, NSMenuDelegate {
       }
     }
     menu.addItem(.separator())
-    menu.addItem(withTitle: L("Открыть Связку", "Open Svyazka"), action: #selector(doOpen), keyEquivalent: "o").target = self
+    menu.addItem(withTitle: L("Открыть Связку", "Open Keyhandoff"), action: #selector(doOpen), keyEquivalent: "o").target = self
     menu.addItem(withTitle: L("Журнал полностью…", "Full log…"), action: #selector(doLog), keyEquivalent: "").target = self
     menu.addItem(withTitle: L("Заблокировать", "Lock"), action: #selector(doLock), keyEquivalent: "l").target = self
     menu.addItem(.separator())
     let login = menu.addItem(withTitle: L("Запускать при входе", "Open at Login"), action: #selector(toggleLogin), keyEquivalent: "")
     login.target = self
     login.state = LoginItem.enabled ? .on : .off
-    menu.addItem(withTitle: L("Выйти из Связки", "Quit Svyazka"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+    menu.addItem(withTitle: L("Выйти из Связки", "Quit Keyhandoff"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     let ver = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
-    menu.addItem(withTitle: L("Связка", "Svyazka") + " " + ver, action: nil, keyEquivalent: "").isEnabled = false
+    menu.addItem(withTitle: L("Связка", "Keyhandoff") + " " + ver, action: nil, keyEquivalent: "").isEnabled = false
   }
 
   @objc private func doOpen() { open() }

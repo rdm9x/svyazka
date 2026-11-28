@@ -1,7 +1,7 @@
 // English for the app window (app.js, index.html). Key — the Russian source string, value — English.
 export default {
   // brand, theme, language
-  'Связка': 'Svyazka',
+  'Связка': 'Keyhandoff',
   'Авто': 'Auto',
   'Светлая': 'Light',
   'Тёмная': 'Dark',
@@ -11,12 +11,12 @@ export default {
   'Не удалось сменить язык': 'Couldn’t change the language',
 
   // agent / storage
-  'агент Связки не отвечает': 'the Svyazka agent isn’t responding',
+  'агент Связки не отвечает': 'the Keyhandoff agent isn’t responding',
   'Не удалось сохранить файл': 'Couldn’t save the file',
-  'Связка не отвечает': 'Svyazka isn’t responding',
-  '{0}. Обновите окно ({1}R) или запустите: svyazka ui': '{0}. Reload the window ({1}R) or run: svyazka ui',
-  'Откройте Связку через приложение': 'Open Svyazka from the app',
-  'Эта страница работает только из приложения «Связка» или команды <code>svyazka ui</code>.': 'This page only works from the Svyazka app or the <code>svyazka ui</code> command.',
+  'Связка не отвечает': 'Keyhandoff isn’t responding',
+  '{0}. Обновите окно ({1}R) или запустите: svyazka ui': '{0}. Reload the window ({1}R) or run: keyhandoff ui',
+  'Откройте Связку через приложение': 'Open Keyhandoff from the app',
+  'Эта страница работает только из приложения «Связка» или команды <code>svyazka ui</code>.': 'This page only works from the Keyhandoff app or the <code>keyhandoff ui</code> command.',
 
   // types and fields
   'Пароль': 'Password',
@@ -137,7 +137,7 @@ export default {
   'Восстановить из бэкапа': 'Restore from Backup',
   'Данные шифруются и хранятся только на этом устройстве': 'Your data is encrypted and stays on this device',
   'Ждём {0}…': 'Waiting for {0}…',
-  'Первый раз — мастер-пароль. Дальше Связка будет открываться по {0}.': 'Enter your master password this once. After that, Svyazka will unlock with {0}.',
+  'Первый раз — мастер-пароль. Дальше Связка будет открываться по {0}.': 'Enter your master password this once. After that, Keyhandoff will unlock with {0}.',
   '{0} не подтверждён — попробуйте ещё раз или введите пароль': '{0} wasn’t confirmed. Try again or enter your password',
   'Минимум 8 символов': 'At least 8 characters',
   'Пароли не совпадают': 'Passwords don’t match',
@@ -194,7 +194,7 @@ export default {
   // dialogs
   'Отмена': 'Cancel',
   'Бэкап сохранён': 'Backup saved',
-  'Это не файл Связки': 'This isn’t a Svyazka file',
+  'Это не файл Связки': 'This isn’t a Keyhandoff file',
   'Загрузить бэкап': 'Load Backup',
   'Объединить — добавит новое и обновит изменённое (так переносят данные между компьютерами). Заменить — сотрёт текущие данные.': 'Merge adds new items and updates changed ones (use this to move data between computers). Replace erases your current data.',
   'Объединить': 'Merge',

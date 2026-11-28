@@ -18,26 +18,26 @@ function tools(core) {
   const types = Object.keys(core.FIELDS);
   return [
     {
-      name: 'svyazka_list',
-      description: 'List shelves (projects/servers) in the user\'s Svyazka vault, or the items on one shelf. Secret values are never shown — only which secret fields exist.',
+      name: 'keyhandoff_list',
+      description: 'List shelves (projects/servers) in the user\'s Keyhandoff vault, or the items on one shelf. Secret values are never shown — only which secret fields exist.',
       inputSchema: S({ shelf: str('Shelf name (or part of it). Omit to list shelves.') }),
       annotations: { readOnlyHint: true },
     },
     {
-      name: 'svyazka_find',
+      name: 'keyhandoff_find',
       description: 'Search items by title, shelf, host, login, URL and other non-secret fields.',
       inputSchema: S({ query: str('Text to search for') }, ['query']),
       annotations: { readOnlyHint: true },
     },
     {
-      name: 'svyazka_show',
+      name: 'keyhandoff_show',
       description: 'Show one item: its non-secret fields and the names of its secret fields (values stay hidden).',
       inputSchema: S({ item: str('Item title, part of it, or "Shelf/Title"') }, ['item']),
       annotations: { readOnlyHint: true },
     },
     {
-      name: 'svyazka_run',
-      description: 'Run a command with secrets from Svyazka in its environment, without seeing them. Defaults: password → SVYAZKA_LOGIN, SVYAZKA_PASSWORD, SVYAZKA_URL; token → SVYAZKA_TOKEN plus every KEY=VALUE line of the token; ssh → SVYAZKA_HOST/USER/PORT and the key added to ssh-agent for 15 min; note → SVYAZKA_TEXT. Secret values in the output are replaced with •••. Use env vars in the command (e.g. "$SVYAZKA_PASSWORD"), never ask for values.',
+      name: 'keyhandoff_run',
+      description: 'Run a command with secrets from Keyhandoff in its environment, without seeing them. Defaults: password → SVYAZKA_LOGIN, SVYAZKA_PASSWORD, SVYAZKA_URL; token → SVYAZKA_TOKEN plus every KEY=VALUE line of the token; ssh → SVYAZKA_HOST/USER/PORT and the key added to ssh-agent for 15 min; note → SVYAZKA_TEXT. Secret values in the output are replaced with •••. Use env vars in the command (e.g. "$SVYAZKA_PASSWORD"), never ask for values.',
       inputSchema: S({
         items: { type: 'array', items: { type: 'string' }, minItems: 1, description: 'Items whose secrets the command needs ("Shelf/Title")' },
         command: {
@@ -50,14 +50,14 @@ function tools(core) {
       annotations: { destructiveHint: true, openWorldHint: true },
     },
     {
-      name: 'svyazka_ssh',
-      description: 'Run a command on a server over SSH with a key from Svyazka (the key goes to ssh-agent for 15 minutes, never to disk). Non-interactive. Output is redacted like svyazka_run.',
+      name: 'keyhandoff_ssh',
+      description: 'Run a command on a server over SSH with a key from Keyhandoff (the key goes to ssh-agent for 15 minutes, never to disk). Non-interactive. Output is redacted like keyhandoff_run.',
       inputSchema: S({ item: str('SSH item ("Shelf/Title")'), command: str('Command to run on the server') }, ['item', 'command']),
       annotations: { destructiveHint: true, openWorldHint: true },
     },
     {
-      name: 'svyazka_add',
-      description: `Save a new item to Svyazka — do it right away whenever a new secret appears (generated password, created token, received credentials). Types: ${types.join(', ')}. Secret fields (password, totp, privateKey, passphrase, value, hidden) accept ONLY "gen" / "gen:32" (generate inside Svyazka), "ask" (the user types it in a system dialog — tell them in chat first) or "@/path/to/file" (read from a file). Other fields are plain text. Payment fields: amount, currency, period (months: 1,3,6,12,24,36, 0 = once), nextDate (YYYY-MM-DD), remind (days), autoRenew, method, url, note.`,
+      name: 'keyhandoff_add',
+      description: `Save a new item to Keyhandoff — do it right away whenever a new secret appears (generated password, created token, received credentials). Types: ${types.join(', ')}. Secret fields (password, totp, privateKey, passphrase, value, hidden) accept ONLY "gen" / "gen:32" (generate inside Svyazka), "ask" (the user types it in a system dialog — tell them in chat first) or "@/path/to/file" (read from a file). Other fields are plain text. Payment fields: amount, currency, period (months: 1,3,6,12,24,36, 0 = once), nextDate (YYYY-MM-DD), remind (days), autoRenew, method, url, note.`,
       inputSchema: S({
         type: { type: 'string', enum: types },
         title: str('Item title'),
@@ -66,13 +66,13 @@ function tools(core) {
       }, ['type', 'title']),
     },
     {
-      name: 'svyazka_payments',
+      name: 'keyhandoff_payments',
       description: 'Upcoming payments for servers, domains and subscriptions, sorted by date.',
       inputSchema: S({}),
       annotations: { readOnlyHint: true },
     },
     {
-      name: 'svyazka_mark_paid',
+      name: 'keyhandoff_mark_paid',
       description: 'Mark a payment item as paid: moves its next date by the period and records it in history.',
       inputSchema: S({ item: str('Payment item ("Shelf/Title")') }, ['item']),
     },
@@ -110,7 +110,7 @@ function text(v) {
 
 // Строка для настроек клиента: node + скрипт по полным путям (у приложений нет вашего PATH)
 export function clientConfig(script) {
-  return { mcpServers: { svyazka: { command: process.execPath, args: [script, 'mcp'] } } };
+  return { mcpServers: { keyhandoff: { command: process.execPath, args: [script, 'mcp'] } } };
 }
 
 export async function serveMcp({ call, core, t, version, setCaller }) {
@@ -122,16 +122,16 @@ export async function serveMcp({ call, core, t, version, setCaller }) {
   async function runTool(name, a) {
     const sink = { buf: '', out(s) { this.buf += s; }, err(s) { this.buf += s; } };
     switch (name) {
-      case 'svyazka_list': return call('list', { shelf: a.shelf || null });
-      case 'svyazka_find': return call('find', { q: String(a.query || '') });
-      case 'svyazka_show': return call('show', { ref: String(a.item || '') });
-      case 'svyazka_payments': return call('pay');
-      case 'svyazka_mark_paid': return call('paid', { ref: String(a.item || '') });
-      case 'svyazka_add': {
+      case 'keyhandoff_list': return call('list', { shelf: a.shelf || null });
+      case 'keyhandoff_find': return call('find', { q: String(a.query || '') });
+      case 'keyhandoff_show': return call('show', { ref: String(a.item || '') });
+      case 'keyhandoff_payments': return call('pay');
+      case 'keyhandoff_mark_paid': return call('paid', { ref: String(a.item || '') });
+      case 'keyhandoff_add': {
         const fields = fieldsFor(core, a.type, a.fields, t);
         return call('add', { type: a.type, title: String(a.title || ''), shelf: a.shelf || null, fields });
       }
-      case 'svyazka_run': {
+      case 'keyhandoff_run': {
         const items = Array.isArray(a.items) ? a.items.map(String) : [];
         if (!items.length) throw new Error(t('Укажите запись'));
         // строка — через оболочку (sh -c, на Windows cmd.exe /d /s /c — кавычки Node расставит сам), массив — напрямую
@@ -142,7 +142,7 @@ export async function serveMcp({ call, core, t, version, setCaller }) {
         const r = await call('run', { refs: items, envmap: a.env || {}, cmd, shell, cwd, env: process.env, sock: process.env.SSH_AUTH_SOCK }, sink);
         return { exitCode: r.code, output: (r.error ? r.error + '\n' : '') + tail(sink.buf) };
       }
-      case 'svyazka_ssh': {
+      case 'keyhandoff_ssh': {
         const it = await call('show', { ref: String(a.item || '') });
         if (it.type !== 'ssh') throw new Error(t('«{0}» — не SSH-запись', it.title));
         if (!it.fields.host) throw new Error(t('У «{0}» не указан хост', it.title));
@@ -174,10 +174,10 @@ export async function serveMcp({ call, core, t, version, setCaller }) {
         return reply(id, {
           protocolVersion: v,
           capabilities: { tools: {} },
-          serverInfo: { name: 'svyazka', title: 'Svyazka', version },
-          instructions: 'Svyazka is the user\'s encrypted keyring. Use secrets without seeing them: find items with svyazka_list/svyazka_find/svyazka_show, '
-            + 'then pass them to svyazka_run or svyazka_ssh. Never ask the user to paste a secret into the chat. '
-            + 'Whenever a new secret appears (you generated a password, created a token or a user), save it immediately with svyazka_add '
+          serverInfo: { name: 'keyhandoff', title: 'Keyhandoff', version },
+          instructions: 'Keyhandoff (Связка) is the user\'s encrypted keyring. Use secrets without seeing them: find items with keyhandoff_list/keyhandoff_find/keyhandoff_show, '
+            + 'then pass them to keyhandoff_run or keyhandoff_ssh. Never ask the user to paste a secret into the chat. '
+            + 'Whenever a new secret appears (you generated a password, created a token or a user), save it immediately with keyhandoff_add '
             + '(secrets only as "gen", "ask" or "@file") and tell the user which shelf it went to.',
         });
       }
@@ -189,7 +189,7 @@ export async function serveMcp({ call, core, t, version, setCaller }) {
         if (!list.some((x) => x.name === name)) return error(id, -32602, `Unknown tool: ${name}`);
         try {
           const r = await runTool(name, params.arguments || {});
-          const isError = name === 'svyazka_run' || name === 'svyazka_ssh' ? r.exitCode !== 0 : false;
+          const isError = name === 'keyhandoff_run' || name === 'keyhandoff_ssh' ? r.exitCode !== 0 : false;
           return reply(id, { content: [{ type: 'text', text: text(r) }], structuredContent: r && typeof r === 'object' && !Array.isArray(r) ? r : undefined, isError });
         } catch (e) {
           return reply(id, { content: [{ type: 'text', text: e.message || String(e) }], isError: true });

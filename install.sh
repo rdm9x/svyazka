@@ -3,7 +3,7 @@
 #   команда svyazka, навык и правило для Claude Code и Codex; на Mac ещё приложение «Связка» и Touch ID.
 # Хранилище (~/.svyazka/vault.json) не трогается: повторный запуск = обновление.
 #
-#   curl -fsSL https://github.com/rdm9x/svyazka/releases/latest/download/install.sh | sh
+#   curl -fsSL https://github.com/rdm9x/keyhandoff/releases/latest/download/install.sh | sh
 #   sh install.sh                      # из распакованного релиза или клона
 #
 # Ничего ставить заранее не нужно: если нет Node.js 20+, установщик скачает Node с nodejs.org
@@ -37,12 +37,16 @@ fetch() { curl -fsSL --retry 2 "$1" -o "$2"; }
 bootstrap() {
   command -v curl >/dev/null 2>&1 || die "$(m "Нужен curl" "curl is required")"
   command -v unzip >/dev/null 2>&1 || die "$(m "Нужен unzip (например: sudo apt install unzip)" "unzip is required (e.g. sudo apt install unzip)")"
-  REL="${SVYAZKA_RELEASE_URL:-https://github.com/rdm9x/svyazka/releases/latest/download}"
+  REL="${SVYAZKA_RELEASE_URL:-https://github.com/rdm9x/keyhandoff/releases/latest/download}"
   T="$(mktemp -d)"
   trap 'rm -rf "$T"' EXIT
-  fetch "$REL/SHA256SUMS.txt" "$T/SUMS" || die "$(m "Не удалось скачать" "Could not download") $REL/SHA256SUMS.txt"
+  # репозиторий назывался rdm9x/svyazka: если нового адреса ещё нет — старый (после переименования GitHub перенаправляет сам)
+  if ! fetch "$REL/SHA256SUMS.txt" "$T/SUMS" 2>/dev/null; then
+    [ -z "${SVYAZKA_RELEASE_URL:-}" ] && REL="https://github.com/rdm9x/svyazka/releases/latest/download" && fetch "$REL/SHA256SUMS.txt" "$T/SUMS" \
+      || die "$(m "Не удалось скачать" "Could not download") $REL/SHA256SUMS.txt"
+  fi
   ZIP="$(grep -o 'svyazka-[0-9][0-9.]*\.zip' "$T/SUMS" | head -1)"
-  [ -n "$ZIP" ] || die "$(m "В SHA256SUMS.txt нет архива Связки" "No Svyazka archive in SHA256SUMS.txt")"
+  [ -n "$ZIP" ] || die "$(m "В SHA256SUMS.txt нет архива Связки" "No Keyhandoff archive in SHA256SUMS.txt")"
   fetch "$REL/$ZIP" "$T/$ZIP" || die "$(m "Не удалось скачать" "Could not download") $ZIP"
   [ "$(sha256 "$T/$ZIP")" = "$(grep " $ZIP\$" "$T/SUMS" | cut -d' ' -f1)" ] || die "$(m "Контрольная сумма $ZIP не совпала — не устанавливаю" "Checksum of $ZIP does not match — not installing")"
   ok "$(m "скачан $ZIP, контрольная сумма совпала" "downloaded $ZIP, checksum OK")"
@@ -78,7 +82,7 @@ private_node() {
   if [ "$(cat "$ND/.svyazka-node" 2>/dev/null)" = "$F" ] && node_ok "$ND/bin/node"; then
     rm -rf "$T"; NODE="$ND/bin/node"; ok "Node.js $("$NODE" -v) — $(m "свой, в ~/.svyazka/node" "private copy in ~/.svyazka/node")"; return
   fi
-  printf "$(m '… Node.js 20+ не найден — скачиваю %s с nodejs.org (~50 МБ, только для Связки)' '… Node.js 20+ not found — downloading %s from nodejs.org (~50 MB, for Svyazka only)')\n" "$F"
+  printf "$(m '… Node.js 20+ не найден — скачиваю %s с nodejs.org (~50 МБ, только для Связки)' '… Node.js 20+ not found — downloading %s from nodejs.org (~50 MB, for Keyhandoff only)')\n" "$F"
   fetch "$DIST/$F" "$T/$F" || die "$(m "Не удалось скачать" "Could not download") $F"
   [ "$(sha256 "$T/$F")" = "$(grep " $F\$" "$T/SUMS" | cut -d' ' -f1)" ] || die "$(m "Контрольная сумма $F не совпала — не устанавливаю" "Checksum of $F does not match — not installing")"
   mkdir -p "$T/x" && tar xzf "$T/$F" -C "$T/x" --strip-components 1
@@ -119,7 +123,7 @@ install_here() {
     rm -rf "$DEST"
     mv "$DEST.new" "$DEST"
   fi
-  ok "$(m "файлы Связки — в" "Svyazka files →") $DEST"
+  ok "$(m "файлы Связки — в" "Keyhandoff files →") $DEST"
 
   SVYAZKA_NODE_BIN="$NODE" sh "$DEST/cli/install.sh" >/dev/null
   # обновление: прежний интерфейс был только русским — закрепляем его, пока язык не выбрали явно

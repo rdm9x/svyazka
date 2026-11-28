@@ -191,7 +191,7 @@ test('окно приложения не открывается само, есл
 
 test('английский: SVYAZKA_LANG=en — ошибки, справка, настройки', (t) => {
   const s = sandbox({ SVYAZKA_LANG: 'en' }); t.after(s.stop);
-  assert.match(s.run(['help']).stdout.split('\n')[0], /^svyazka — Svyazka: a keychain for people and AI agents/);
+  assert.match(s.run(['help']).stdout.split('\n')[0], /^keyhandoff — Keyhandoff: a keychain for people and AI agents/);
   assert.equal(s.run(['init']).status, 0);
   let r = s.run(['ls', 'no-such-shelf']);
   assert.notEqual(r.status, 0);

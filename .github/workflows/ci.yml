@@ -46,6 +46,8 @@ jobs:
           sh install.sh
           export PATH="$HOME/.local/bin:$PATH"
           svyazka help | head -1
+          keyhandoff help | head -1
+          kh help | head -1
           test -f "$HOME/.claude/skills/svyazka/SKILL.md"
           grep -q 'svyazka:begin' "$HOME/.claude/CLAUDE.md"
           export SVYAZKA_HOME=$(mktemp -d) SVYAZKA_TEST=1 SVYAZKA_TEST_PASSWORD=ci-pass-123 SVYAZKA_TEST_CONFIRM=1
@@ -68,7 +70,9 @@ jobs:
           powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1
           $env:Path = "$env:Path;$HOME\.svyazka\bin"
           svyazka help | Select-Object -First 1
-          $pr = [Environment]::GetFolderPath('Programs'); if (-not ((Test-Path "$pr\Связка.lnk") -or (Test-Path "$pr\Svyazka.lnk"))) { throw 'нет ярлыка' }
+          $pr = [Environment]::GetFolderPath('Programs'); if (-not ((Test-Path "$pr\Связка.lnk") -or (Test-Path "$pr\Keyhandoff.lnk"))) { throw 'нет ярлыка' }
+          keyhandoff help | Select-Object -First 1
+          kh help | Select-Object -First 1
           if (-not (Test-Path "$HOME\.claude\skills\svyazka\SKILL.md")) { throw 'нет навыка' }
           if (-not (Select-String -Path "$HOME\.claude\CLAUDE.md" -Pattern 'svyazka:begin' -Quiet)) { throw 'нет правила' }
           $env:SVYAZKA_HOME = Join-Path $env:TEMP 'sv-ci'; $env:SVYAZKA_TEST = '1'; $env:SVYAZKA_TEST_PASSWORD = 'ci-pass-123'; $env:SVYAZKA_TEST_CONFIRM = '1'

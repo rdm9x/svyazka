@@ -1001,6 +1001,7 @@ function updateHint() {
 
 const help = () => [
   t('svyazka — Связка: ключница для людей и ИИ-агентов (секреты не показываются без Touch ID / Windows Hello)'),
+  t('  (та же команда: keyhandoff, kh)'),
   '',
   t('  svyazka status | unlock | lock | stop   состояние, открыть (окно с паролем), закрыть, остановить агент'),
   t('  svyazka init                            создать пустое хранилище на этом компьютере'),

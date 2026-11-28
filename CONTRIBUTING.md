@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping! Svyazka is deliberately small: no build step and **no runtime dependencies** — Node's standard
+Thanks for helping! Keyhandoff is deliberately small: no build step and **no runtime dependencies** — Node's standard
 library, WebCrypto, Swift for two tiny macOS helpers. Please keep it that way; a password tool should be easy to read
 end to end.
 

@@ -2,7 +2,7 @@
 #   команда svyazka, ярлык «Связка» в меню «Пуск», навык и правило для Claude Code и Codex.
 # Хранилище (%USERPROFILE%\.svyazka\vault.json) не трогается: повторный запуск = обновление.
 #
-#   irm https://github.com/rdm9x/svyazka/releases/latest/download/install.ps1 -OutFile $env:TEMP\svyazka-install.ps1
+#   irm https://github.com/rdm9x/keyhandoff/releases/latest/download/install.ps1 -OutFile $env:TEMP\svyazka-install.ps1
 #   powershell -ExecutionPolicy Bypass -File $env:TEMP\svyazka-install.ps1   # скачает релиз сам
 #   powershell -ExecutionPolicy Bypass -File install.ps1      # из распакованного релиза или клона
 #
@@ -36,13 +36,18 @@ $Src = $PSScriptRoot
 # Запуск одной строкой (скачан только install.ps1): скачать последний релиз, проверить сумму, запустить его install.ps1
 if (-not $Src -or -not (Test-Path (Join-Path $Src 'cli\svyazka.mjs'))) {
   $script:Boot = $true
-  $rel = if ($env:SVYAZKA_RELEASE_URL) { $env:SVYAZKA_RELEASE_URL } else { 'https://github.com/rdm9x/svyazka/releases/latest/download' }
+  $rel = if ($env:SVYAZKA_RELEASE_URL) { $env:SVYAZKA_RELEASE_URL } else { 'https://github.com/rdm9x/keyhandoff/releases/latest/download' }
   $t = Join-Path ([IO.Path]::GetTempPath()) ('svyazka-' + [Guid]::NewGuid().ToString('N'))
   New-Item -ItemType Directory -Force -Path $t | Out-Null
   try {
-    Fetch "$rel/SHA256SUMS.txt" "$t\SUMS"
+    # репозиторий назывался rdm9x/svyazka: если нового адреса ещё нет — старый (после переименования GitHub перенаправляет сам)
+    try { Fetch "$rel/SHA256SUMS.txt" "$t\SUMS" } catch {
+      if ($env:SVYAZKA_RELEASE_URL) { throw }
+      $rel = 'https://github.com/rdm9x/svyazka/releases/latest/download'
+      Fetch "$rel/SHA256SUMS.txt" "$t\SUMS"
+    }
     $zip = First "$t\SUMS" 'svyazka-[0-9][0-9.]*\.zip'
-    if (-not $zip) { Die (M 'В SHA256SUMS.txt нет архива Связки' 'No Svyazka archive in SHA256SUMS.txt') }
+    if (-not $zip) { Die (M 'В SHA256SUMS.txt нет архива Связки' 'No Keyhandoff archive in SHA256SUMS.txt') }
     Fetch "$rel/$zip" "$t\$zip"
     if ((Sum "$t\$zip") -ne (SumFor "$t\SUMS" $zip)) { Die (M "Контрольная сумма $zip не совпала — не устанавливаю" "Checksum of $zip does not match — not installing") }
     Ok (M "скачан $zip, контрольная сумма совпала" "downloaded $zip, checksum OK")
@@ -85,7 +90,7 @@ else {
     if ((Test-Path $mark) -and ((Get-Content $mark -Raw).Trim() -eq $f) -and (NodeOk (Join-Path $NodeDir 'node.exe'))) {
       $node = Join-Path $NodeDir 'node.exe'
     } else {
-      Write-Host (M "… Node.js 20+ не найден — скачиваю $f с nodejs.org (~30 МБ, только для Связки)" "… Node.js 20+ not found — downloading $f from nodejs.org (~30 MB, for Svyazka only)")
+      Write-Host (M "… Node.js 20+ не найден — скачиваю $f с nodejs.org (~30 МБ, только для Связки)" "… Node.js 20+ not found — downloading $f from nodejs.org (~30 MB, for Keyhandoff only)")
       Fetch "$dist/$f" "$t\$f"
       if ((Sum "$t\$f") -ne (SumFor "$t\SUMS" $f)) { Die (M "Контрольная сумма $f не совпала — не устанавливаю" "Checksum of $f does not match — not installing") }
       Expand-Archive -LiteralPath "$t\$f" -DestinationPath "$t\x" -Force
@@ -112,7 +117,7 @@ if ((Resolve-Path $Src).Path -ne $App) {
   if (Test-Path $App) { Remove-Item -Recurse -Force $App }
   Move-Item $tmp $App
 }
-Ok "$(M 'файлы Связки — в' 'Svyazka files →') $App"
+Ok "$(M 'файлы Связки — в' 'Keyhandoff files →') $App"
 
 # команда svyazka
 # полный путь к node: ярлык и агенты запускают svyazka без вашего PATH; путь в профиле — через %USERPROFILE% (файл в ASCII)
@@ -126,23 +131,23 @@ if (-not (($userPath -split ';') -contains $Bin)) {
 $env:Path = "$env:Path;$Bin"
 
 # ярлык в меню «Пуск»
-# WScript.Shell не сохраняет ярлык с не-ASCII именем — сохраняем как Svyazka.lnk и переименовываем
+# WScript.Shell не сохраняет ярлык с не-ASCII именем — сохраняем как Keyhandoff.lnk и переименовываем
 $programs = [Environment]::GetFolderPath('Programs')
-$lnk = Join-Path $programs ((M 'Связка' 'Svyazka') + '.lnk')
-foreach ($old in 'Связка.lnk', 'Svyazka.lnk') { $o = Join-Path $programs $old; if ($o -ne $lnk -and (Test-Path -LiteralPath $o)) { Remove-Item -LiteralPath $o -Force } }
-$tmpLnk = Join-Path $programs 'Svyazka.lnk'
+$lnk = Join-Path $programs ((M 'Связка' 'Keyhandoff') + '.lnk')
+foreach ($old in 'Связка.lnk', 'Svyazka.lnk', 'Keyhandoff.lnk') { $o = Join-Path $programs $old; if ($o -ne $lnk -and (Test-Path -LiteralPath $o)) { Remove-Item -LiteralPath $o -Force } }
+$tmpLnk = Join-Path $programs 'Keyhandoff.lnk'
 $sh = New-Object -ComObject WScript.Shell
 $s = $sh.CreateShortcut($tmpLnk)
 $s.TargetPath = Join-Path $env:WINDIR 'System32\wscript.exe'
 $s.Arguments = '"' + (Join-Path $App 'cli\win\svyazka-ui.vbs') + '"'
 $s.IconLocation = (Join-Path $App 'icons\icon.ico') + ',0'
-$s.Description = M 'Связка — ключница для людей и ИИ-агентов' 'Svyazka — a keyring for people and AI agents'
+$s.Description = M 'Связка — ключница для людей и ИИ-агентов' 'Keyhandoff — a keyring your AI agents use themselves'
 $s.Save()
 if ($lnk -ne $tmpLnk) {
   if (Test-Path -LiteralPath $lnk) { Remove-Item -LiteralPath $lnk -Force }
   Move-Item -LiteralPath $tmpLnk -Destination $lnk
 }
-Ok (M 'ярлык «Связка» — в меню «Пуск» (можно закрепить на панели задач)' 'Svyazka shortcut in the Start menu (can be pinned to the taskbar)')
+Ok (M 'ярлык «Связка» — в меню «Пуск» (можно закрепить на панели задач)' 'Keyhandoff shortcut in the Start menu (can be pinned to the taskbar)')
 
 # навык для Claude Code и Codex (копия: симлинки на Windows требуют прав)
 foreach ($agent in @('.claude', '.codex')) {

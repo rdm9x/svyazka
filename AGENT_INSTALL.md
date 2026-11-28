@@ -1,6 +1,6 @@
-# Installing Svyazka — instructions for an AI agent (Claude Code, Codex, …)
+# Installing Keyhandoff (Связка) — instructions for an AI agent (Claude Code, Codex, …)
 
-You are installing **Svyazka** for the user: a local encrypted keyring (macOS, Windows, Linux) with a `svyazka` CLI,
+You are installing **Keyhandoff** for the user: a local encrypted keyring (macOS, Windows, Linux) with a `keyhandoff` CLI (same program as `kh` and `svyazka`),
 a desktop app and a skill for Claude Code and Codex. This folder is the unpacked release (or a clone of the repository).
 
 **Talk to the user in their language** (the app speaks English and Russian, chosen by the system language; `svyazka config lang en|ru` switches it). Keep messages short and plain.
@@ -15,7 +15,7 @@ In one message tell the user what will happen and wait for a yes:
 - the app: `~/Applications/Связка.app` on macOS, a «Связка» Start-menu shortcut on Windows, `svyazka ui` on Linux;
 - the `svyazka` skill is linked into `~/.claude/skills` (and `~/.codex/skills` if Codex is installed);
 - a short rule block is added to `~/.claude/CLAUDE.md` (and `~/.codex/AGENTS.md`) between
-  `<!-- svyazka:begin/end -->` markers: “take credentials from Svyazka; save every new secret there immediately”.
+  `<!-- svyazka:begin/end -->` markers: “take credentials from Keyhandoff; save every new secret there immediately”.
   An existing file is backed up as `.bak-svyazka`.
 
 ## 2. Check requirements
@@ -25,7 +25,7 @@ node -v 2>/dev/null; sw_vers -productVersion 2>/dev/null   # macOS: 13+
 ```
 - macOS 13 or newer; Windows 10/11; Linux x64 / arm64 (glibc).
 - **Node.js** — if it is missing or older than 20, the installer downloads the current LTS from nodejs.org into
-  `~/.svyazka/node` (checksum-verified; a private copy only Svyazka uses, the system is not touched). Mention this
+  `~/.svyazka/node` (checksum-verified; a private copy only Keyhandoff uses, the system is not touched). Mention this
   in step 1 when `node -v` shows nothing.
 - **macOS** — nothing else: the Touch ID helper and the app are prebuilt in the release. Only a git clone (no `prebuilt/`
   folder) compiles them and needs Command Line Tools — then ask the user to run `xcode-select --install`.
@@ -38,7 +38,7 @@ node -v 2>/dev/null; sw_vers -productVersion 2>/dev/null   # macOS: 13+
 sh "<this folder>/install.sh"                                        # macOS, Linux
 powershell -ExecutionPolicy Bypass -File "<this folder>\install.ps1"   # Windows
 ```
-It copies Svyazka to `~/.svyazka/app`, installs the Touch ID helper and the app, links the skills and adds the rules.
+It copies Keyhandoff to `~/.svyazka/app`, installs the Touch ID helper and the app, links the skills and adds the rules.
 Re-running it updates an existing installation; the vault is never touched.
 If it reports that `~/.local/bin` is not in `PATH`, add `export PATH="$HOME/.local/bin:$PATH"` to `~/.zprofile`
 (with consent); until the terminal restarts, call `~/.local/bin/svyazka`.
@@ -47,7 +47,7 @@ enter their Mac password and click **Always Allow**.
 
 ## 4. Create the vault
 
-Ask whether the user has a Svyazka backup from another Mac:
+Ask whether the user has a Keyhandoff backup from another Mac:
 - **yes** → `svyazka import <file>` — a dialog asks for that backup's master password;
 - **no** → `svyazka init`. Warn first: a dialog will appear (on Linux without `zenity` — a prompt in the terminal); the password must be **at least 8 characters**,
   a 3–4 word phrase is best, and **it cannot be recovered**. The command waits for input — tell the user to look at
@@ -56,7 +56,7 @@ Ask whether the user has a Svyazka backup from another Mac:
 ## 5. Codex
 
 If `~/.codex` exists, the skill and rule are already installed. Explain one thing: the Codex sandbox blocks the
-Svyazka agent socket, so Codex will ask permission to run `svyazka` outside the sandbox — approve it (it can be
+Keyhandoff agent socket, so Codex will ask permission to run `svyazka` outside the sandbox — approve it (it can be
 allowed permanently). Codex picks up the skill after it restarts. No Codex — skip.
 
 ## 6. Move existing credentials (optional)

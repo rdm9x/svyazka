@@ -104,13 +104,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         if let s = res.out, s.hasPrefix("http://127.0.0.1"), let u = URL(string: s) {
           let en = URLComponents(url: u, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "lang" }?.value == "en"
           if en != english { english = en; self.buildMenu() }
-          self.window.title = L("Связка", "Svyazka")
+          self.window.title = L("Связка", "Keyhandoff")
           self.web.load(URLRequest(url: u))
         } else {
           let msg = (res.err ?? "").replacingOccurrences(of: "<", with: "&lt;")
           self.web.loadHTMLString("""
             <body style="font:15px -apple-system;padding:48px 32px;color:#888">
-            <h2 style="color:#ccc;font-weight:600">\(L("Связка не запустилась", "Svyazka didn't start"))</h2>
+            <h2 style="color:#ccc;font-weight:600">\(L("Связка не запустилась", "Keyhandoff didn't start"))</h2>
             <p>\(msg)</p><p>\(L("Проверьте в Терминале", "Check in Terminal")): <code>svyazka status</code>. \(L("Обновить окно — ⌘R.", "Reload the window — ⌘R."))</p></body>
             """, baseURL: nil)
         }
@@ -179,8 +179,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     let appMenu = NSMenu()
     appMenu.addItem(withTitle: L("Обновить", "Reload"), action: #selector(reloadUI), keyEquivalent: "r")
     appMenu.addItem(.separator())
-    appMenu.addItem(withTitle: L("Скрыть Связку", "Hide Svyazka"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-    appMenu.addItem(withTitle: L("Завершить Связку", "Quit Svyazka"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+    appMenu.addItem(withTitle: L("Скрыть Связку", "Hide Keyhandoff"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+    appMenu.addItem(withTitle: L("Завершить Связку", "Quit Keyhandoff"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     appItem.submenu = appMenu
 
     let editItem = NSMenuItem()

@@ -31,4 +31,4 @@ jobs:
           (cd dist && shasum -a 256 *.zip install.sh install.ps1 > SHA256SUMS.txt)
           # подпись для svyazka update: секретный ключ — только в секретах репозитория и в Связке автора
           RELEASE_SIGNING_KEY="$SIGNING_KEY" node cli/sign-release.mjs dist/SHA256SUMS.txt
-          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/install.sh dist/install.ps1 dist/SHA256SUMS.txt dist/SHA256SUMS.txt.sig --title "Svyazka $GITHUB_REF_NAME" --notes-file <(sed -n "/^## ${GITHUB_REF_NAME#v}/,/^## /p" CHANGELOG.md | sed '$d')
+          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/install.sh dist/install.ps1 dist/SHA256SUMS.txt dist/SHA256SUMS.txt.sig --title "Keyhandoff $GITHUB_REF_NAME" --notes-file <(sed -n "/^## ${GITHUB_REF_NAME#v}/,/^## /p" CHANGELOG.md | sed '$d')

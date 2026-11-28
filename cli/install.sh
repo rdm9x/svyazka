@@ -26,21 +26,30 @@ if [ "$(uname)" = "Darwin" ]; then
   fi
 fi
 
-# Команда svyazka — обёртка с полным путём к node (окно приложения и агенты запускают её без вашего PATH).
+# Команды keyhandoff, kh и svyazka — одна программа: обёртки с полным путём к node (окно приложения и агенты
+# запускают их без вашего PATH). svyazka остаётся навсегда: на неё опираются навык, правила и MCP-настройки.
 # Сначала удаляем: раньше здесь была ссылка на svyazka.mjs, запись через неё испортила бы сам скрипт.
 q() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
-W="$HOME/.local/bin/svyazka"
-rm -f "$W"
-cat > "$W" <<EOF
+for name in svyazka keyhandoff kh; do
+  W="$HOME/.local/bin/$name"
+  # чужую программу с тем же именем (например, другую kh) не трогаем
+  if [ -e "$W" ] && [ ! -L "$W" ] && ! grep -q "файл создал установщик" "$W" 2>/dev/null; then
+    echo "! $W — другая программа, пропускаю" >&2
+    continue
+  fi
+  rm -f "$W"
+  cat > "$W" <<EOF
 #!/bin/sh
-# svyazka — запуск Связки (файл создал установщик)
+# $name — Связка / Keyhandoff (файл создал установщик)
 N=$(q "$NODE")
 [ -x "\$N" ] || N=node
 exec "\$N" $(q "$HERE/svyazka.mjs") "\$@"
 EOF
-chmod 755 "$W"
+  chmod 755 "$W"
+done
+W="$HOME/.local/bin/keyhandoff"
 
 mkdir -p "$HOME/.claude/skills" && ln -sfn "$HERE/skill" "$HOME/.claude/skills/svyazka"   # навык для Claude Code
 [ -d "$HOME/.codex" ] && mkdir -p "$HOME/.codex/skills" && ln -sfn "$HERE/skill" "$HOME/.codex/skills/svyazka"   # тот же навык для Codex
 echo "Готово: $W (Node: $NODE)"
-echo "Дальше: svyazka init  (или svyazka import <бэкап>)"
+echo "Дальше: keyhandoff init  (или keyhandoff import <бэкап>; команды svyazka и kh — то же самое)"

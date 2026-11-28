@@ -46,17 +46,17 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$B/Svyazka" "$APP/Contents/MacOS/Svyazka"
 cp "$B/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
-# имя в Finder, Dock и Spotlight — по языку системы (папка остаётся Связка.app)
+# имя в Finder, Dock и Spotlight: «Связка» на русской системе, Keyhandoff на остальных (папка остаётся Связка.app)
 mkdir -p "$APP/Contents/Resources/ru.lproj" "$APP/Contents/Resources/en.lproj"
 printf '"CFBundleDisplayName" = "Связка";\n"CFBundleName" = "Связка";\n' > "$APP/Contents/Resources/ru.lproj/InfoPlist.strings"
-printf '"CFBundleDisplayName" = "Svyazka";\n"CFBundleName" = "Svyazka";\n' > "$APP/Contents/Resources/en.lproj/InfoPlist.strings"
+printf '"CFBundleDisplayName" = "Keyhandoff";\n"CFBundleName" = "Keyhandoff";\n' > "$APP/Contents/Resources/en.lproj/InfoPlist.strings"
 cat > "$APP/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>Связка</string>
-  <key>CFBundleDisplayName</key><string>Связка</string>
+  <key>CFBundleName</key><string>Keyhandoff</string>
+  <key>CFBundleDisplayName</key><string>Keyhandoff</string>
   <key>CFBundleIdentifier</key><string>local.svyazka.app</string>
   <key>CFBundleExecutable</key><string>Svyazka</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
@@ -65,7 +65,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
-  <key>CFBundleDevelopmentRegion</key><string>ru</string>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>LSHasLocalizedDisplayName</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
   <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>

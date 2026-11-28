@@ -1,5 +1,5 @@
 {
-  "name": "svyazka",
+  "name": "keyhandoff",
   "version": "2.0.1",
   "private": true,
   "description": "Local encrypted keyring (macOS, Windows, Linux) that AI coding agents (Claude Code, Codex) can use without seeing your secrets",

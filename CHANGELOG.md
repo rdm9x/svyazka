@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **English name: Keyhandoff** (Russian stays «Связка»). The command is `keyhandoff`, with the short alias `kh`;
+  `svyazka` keeps working forever, so existing skills, rules and MCP configs don't change. On an English (or any
+  non-Russian) Mac the app shows as Keyhandoff in Finder, Dock and Spotlight; the Windows shortcut is “Keyhandoff”.
+- The English rule written to `CLAUDE.md` / `AGENTS.md`, the MCP server (`keyhandoff`, tools `keyhandoff_*`), help and
+  installer messages use the new name.
+- Installers and `keyhandoff update` point to github.com/rdm9x/keyhandoff and fall back to the old address.
+- Menu bar wording: agents *use* keys.
+
 ## 2.0.1 — 2026-11-28
 
 - English interface: no stray “Back” button above an item in the three-column window.

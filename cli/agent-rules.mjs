@@ -32,14 +32,14 @@ const BLOCK_RU = `${BEGIN}
 ${END}`;
 
 const BLOCK_EN = `${BEGIN}
-## Credentials and secrets live in Svyazka
+## Credentials and secrets live in Keyhandoff
 
-Passwords, SSH keys, tokens, .env files and payments for servers/domains/subscriptions are kept in Svyazka (the \`svyazka\` command, the \`svyazka\` skill).
-- Need access — take it from Svyazka via the svyazka skill (\`svyazka run\`, \`svyazka ssh\`). Never print values or put them in the chat.
+Passwords, SSH keys, tokens, .env files and payments for servers/domains/subscriptions are kept in Keyhandoff (the \`keyhandoff\` command — also \`kh\` and \`svyazka\` — and the \`svyazka\` skill).
+- Need access — use it through Keyhandoff (\`keyhandoff run\`, \`keyhandoff ssh\`). Never print values or put them in the chat.
 - **A new secret appeared** (you generated a password or key, created a token or user, received credentials from a service or from me) —
-  **save it to Svyazka right away** (\`svyazka add\`, the secret via \`gen\` / \`@file\` / \`ask\`) and say which shelf you put it on.
+  **save it to Keyhandoff right away** (\`keyhandoff add\`, the secret via \`gen\` / \`@file\` / \`ask\`) and say which shelf you put it on.
   Don't leave secrets in project files, notes, commits or the chat.
-- A new server, domain or subscription with a price and date — add a payment (\`svyazka add payment\`).
+- A new server, domain or subscription with a price and date — add a payment (\`keyhandoff add payment\`).
 ${END}`;
 const BLOCK = en ? BLOCK_EN : BLOCK_RU;
 
@@ -64,6 +64,6 @@ for (const t of targets) {
   if (old) fs.copyFileSync(t.file, t.file + '.bak-svyazka');
   fs.writeFileSync(t.file, next);
   console.log(en
-    ? `✓ ${t.name}: ${mode === 'remove' ? 'rule removed from' : 'Svyazka rule in'} ${t.file}${old ? ' (backup: .bak-svyazka)' : ''}`
+    ? `✓ ${t.name}: ${mode === 'remove' ? 'rule removed from' : 'Keyhandoff rule in'} ${t.file}${old ? ' (backup: .bak-svyazka)' : ''}`
     : `✓ ${t.name}: ${mode === 'remove' ? 'правило убрано из' : 'правило о Связке в'} ${t.file}${old ? ' (копия: .bak-svyazka)' : ''}`);
 }
