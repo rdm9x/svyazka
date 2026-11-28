@@ -3,7 +3,7 @@
 You are installing **Svyazka** for the user: a local encrypted keyring (macOS, Windows, Linux) with a `svyazka` CLI,
 a desktop app and a skill for Claude Code and Codex. This folder is the unpacked release (or a clone of the repository).
 
-**Talk to the user in their language** (the app's interface is Russian). Keep messages short and plain.
+**Talk to the user in their language** (the app speaks English and Russian, chosen by the system language; `svyazka config lang en|ru` switches it). Keep messages short and plain.
 
 **Rule for the whole installation: never read or print secrets** — not key contents, not `.env` values, not
 `~/.svyazka/vault.json`. Values are moved by `svyazka` itself from files; you only handle names and paths.

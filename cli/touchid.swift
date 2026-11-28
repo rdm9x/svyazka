@@ -18,12 +18,12 @@ let args = Array(CommandLine.arguments.dropFirst())
 
 func verify(_ reason: String) -> Int32 {
   let ctx = LAContext()
-  ctx.localizedCancelTitle = "Ввести пароль"
+  ctx.localizedCancelTitle = ProcessInfo.processInfo.environment["SVYAZKA_CANCEL_TITLE"] ?? "Ввести пароль" // язык задаёт svyazka
   var err: NSError?
   guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &err) else { return 2 }
   let sem = DispatchSemaphore(value: 0)
   var code: Int32 = 2
-  ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason.isEmpty ? "открыть Связку" : reason) { ok, e in
+  ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason.isEmpty ? (ProcessInfo.processInfo.environment["SVYAZKA_DEFAULT_REASON"] ?? "открыть Связку") : reason) { ok, e in
     if ok { code = 0 }
     else if let e = e as? LAError {
       switch e.code {

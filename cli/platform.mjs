@@ -5,12 +5,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
+import { makeT } from '../i18n.js';
+import EN from '../lang/en-cli.js';
+
+// Тот же язык, что у svyazka (i18n.js — один модуль на процесс)
+const t = makeT({ en: EN });
 
 export const WIN = process.platform === 'win32';
 export const MAC = process.platform === 'darwin';
 export const LINUX = process.platform === 'linux';
 export const OS_NAME = MAC ? 'macOS' : WIN ? 'Windows' : 'Linux';
-export const VERIFY_NAME = MAC ? 'Touch ID' : WIN ? 'Windows Hello' : 'подтверждение';
+// Название проверки владельца — функцией: язык выбирается уже после загрузки модуля
+export const verifyName = () => (MAC ? 'Touch ID' : WIN ? 'Windows Hello' : t('подтверждение'));
 
 const has = (cmd) => {
   const r = spawnSync(WIN ? 'where' : 'which', [cmd], { stdio: 'ignore' });
@@ -39,20 +45,20 @@ const PS_INPUT = `
 Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing
 [Windows.Forms.Application]::EnableVisualStyles()
 $f = New-Object Windows.Forms.Form
-$f.Text = 'Связка'; $f.ClientSize = New-Object Drawing.Size(460, 190); $f.StartPosition = 'CenterScreen'
+$f.Text = $env:SV_TITLE; $f.ClientSize = New-Object Drawing.Size(460, 190); $f.StartPosition = 'CenterScreen'
 $f.TopMost = $true; $f.FormBorderStyle = 'FixedDialog'; $f.MaximizeBox = $false; $f.MinimizeBox = $false
 $f.Font = New-Object Drawing.Font('Segoe UI', 10)
 $l = New-Object Windows.Forms.Label; $l.Text = $env:SV_TEXT; $l.SetBounds(16, 14, 428, 84)
 $t = New-Object Windows.Forms.TextBox; $t.UseSystemPasswordChar = $true; $t.SetBounds(16, 104, 428, 28)
 $ok = New-Object Windows.Forms.Button; $ok.Text = 'OK'; $ok.SetBounds(254, 146, 92, 30); $ok.DialogResult = 'OK'
-$c = New-Object Windows.Forms.Button; $c.Text = 'Отмена'; $c.SetBounds(352, 146, 92, 30); $c.DialogResult = 'Cancel'
+$c = New-Object Windows.Forms.Button; $c.Text = $env:SV_CANCEL; $c.SetBounds(352, 146, 92, 30); $c.DialogResult = 'Cancel'
 $f.AcceptButton = $ok; $f.CancelButton = $c; $f.Controls.AddRange(@($l, $t, $ok, $c))
 $f.Add_Shown({ $f.Activate(); $t.Focus() })
 if ($f.ShowDialog() -eq 'OK') { [Console]::Out.Write($t.Text) } else { exit 1 }`;
 
 const PS_CONFIRM = `
 Add-Type -AssemblyName System.Windows.Forms
-$r = [Windows.Forms.MessageBox]::Show($env:SV_TEXT, 'Связка', 'YesNo', 'Warning', 'Button2', 'DefaultDesktopOnly')
+$r = [Windows.Forms.MessageBox]::Show($env:SV_TEXT, $env:SV_TITLE, 'YesNo', 'Warning', 'Button2', 'DefaultDesktopOnly')
 if ($r -eq 'Yes') { exit 0 } else { exit 1 }`;
 
 // Windows Hello через WinRT UserConsentVerifier. 0 — подтверждено, 1 — отказ, 2 — недоступно.
@@ -73,13 +79,14 @@ try {
 const asq = (s) => '"' + String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
 
 // Скрытый ввод (пароль). null — отмена.
-export function dialogInput(text, title = 'Связка') {
+export function dialogInput(text, title = t('Связка')) {
   let r;
   if (MAC) {
-    const script = `text returned of (display dialog ${asq(text)} with title ${asq(title)} default answer "" with hidden answer buttons {"Отмена", "OK"} default button "OK" cancel button "Отмена" with icon caution giving up after 180)`;
+    const cancel = asq(t('Отмена'));
+    const script = `text returned of (display dialog ${asq(text)} with title ${asq(title)} default answer "" with hidden answer buttons {${cancel}, "OK"} default button "OK" cancel button ${cancel} with icon caution giving up after 180)`;
     r = spawnSync('osascript', ['-e', script], { encoding: 'utf8' });
   } else if (WIN) {
-    r = ps(PS_INPUT, { env: { SV_TEXT: text } });
+    r = ps(PS_INPUT, { env: { SV_TEXT: text, SV_TITLE: title, SV_CANCEL: t('Отмена') } });
   } else {
     r = spawnSync('zenity', ['--entry', '--hide-text', '--title', title, '--text', text], { encoding: 'utf8', timeout: 180000 });
   }
@@ -89,19 +96,24 @@ export function dialogInput(text, title = 'Связка') {
 }
 
 export function dialogConfirm(text) {
+  const q = t('Разрешить: {0}?', text), title = t('Связка');
   if (MAC) {
-    const script = `button returned of (display dialog ${asq('Разрешить: ' + text + '?')} with title "Связка" buttons {"Запретить", "Разрешить"} default button "Запретить" cancel button "Запретить" with icon caution giving up after 120)`;
+    const allow = t('Разрешить'), deny = asq(t('Запретить'));
+    const script = `button returned of (display dialog ${asq(q)} with title ${asq(title)} buttons {${deny}, ${asq(allow)}} default button ${deny} cancel button ${deny} with icon caution giving up after 120)`;
     const r = spawnSync('osascript', ['-e', script], { encoding: 'utf8' });
-    return r.status === 0 && r.stdout.trim() === 'Разрешить';
+    return r.status === 0 && r.stdout.trim() === allow;
   }
-  if (WIN) return ps(PS_CONFIRM, { env: { SV_TEXT: 'Разрешить: ' + text + '?' }, timeout: 120000 }).status === 0;
-  return spawnSync('zenity', ['--question', '--title', 'Связка', '--text', 'Разрешить: ' + text + '?'], { timeout: 120000 }).status === 0;
+  if (WIN) return ps(PS_CONFIRM, { env: { SV_TEXT: q, SV_TITLE: title }, timeout: 120000 }).status === 0;
+  return spawnSync('zenity', ['--question', '--title', title, '--text', q], { timeout: 120000 }).status === 0;
 }
+
+// Кнопка «ввести пароль» в окне Touch ID — на языке Связки (помощник читает переменную)
+const helperEnv = () => ({ ...process.env, SVYAZKA_CANCEL_TITLE: t('Ввести пароль') });
 
 // Проверка, что за компьютером владелец: 'ok' | 'denied' | 'unavailable'
 export function verifyUser(reason, touchidHelper) {
   if (MAC && touchidHelper && fs.existsSync(touchidHelper)) {
-    const r = spawnSync(touchidHelper, [reason], { stdio: 'ignore' });
+    const r = spawnSync(touchidHelper, [reason], { stdio: 'ignore', env: helperEnv() });
     return r.status === 0 ? 'ok' : r.status === 2 ? 'unavailable' : 'denied';
   }
   if (WIN) {
@@ -139,7 +151,7 @@ export function quickLoad(id, reason, { touchid, dir }) {
   let r;
   if (MAC) {
     if (!touchid || !fs.existsSync(touchid)) return { status: 'unavailable' };
-    r = spawnSync(touchid, ['--load', id, reason], { encoding: 'utf8' });
+    r = spawnSync(touchid, ['--load', id, reason], { encoding: 'utf8', env: helperEnv() });
   } else if (WIN) {
     const file = path.join(dir, `quick-${id}.bin`);
     if (!fs.existsSync(file)) return { status: 'none' };
@@ -231,6 +243,18 @@ export function defaultSyncDir(home) {
   if (MAC && fs.existsSync(icloud)) return path.join(icloud, 'Связка');
   if (WIN && process.env.OneDrive && fs.existsSync(process.env.OneDrive)) return path.join(process.env.OneDrive, 'Связка');
   return path.join(home, 'Documents', 'Svyazka');
+}
+
+// Язык системы (тег вроде «ru-RU» / «en-AM»): macOS — первый язык из настроек, Windows — локаль пользователя, Linux — LANG
+export function systemLang() {
+  if (MAC) {
+    try {
+      const m = spawnSync('defaults', ['read', '-g', 'AppleLanguages'], { encoding: 'utf8', timeout: 3000 }).stdout.match(/[A-Za-z]{2,3}(?:-[A-Za-z0-9]+)*/);
+      if (m) return m[0];
+    } catch {}
+  }
+  if (!WIN) { const e = process.env.LC_ALL || process.env.LC_MESSAGES || process.env.LANG; if (e && e !== 'C' && e !== 'POSIX') return e; }
+  return Intl.DateTimeFormat().resolvedOptions().locale;
 }
 
 export const tmpdir = os.tmpdir();

@@ -95,6 +95,7 @@ powershell -ExecutionPolicy Bypass -File $env:TEMP\svyazka-install.ps1
 | `svyazka sync`, `config sync-dir <папка>` | зашифрованный бэкап и слияние между вашими компьютерами |
 | `svyazka import <файл>` | бэкап Связки (слияние) или открытый JSON в [формате импорта](IMPORT.md) |
 | `svyazka log`, `status`, `lock` | журнал, состояние, закрыть сейчас |
+| `svyazka config lang ru\|en\|auto` | язык интерфейса (auto — по системе) |
 
 Типы записей: `password`, `ssh`, `token` (значение или целый `.env`), `payment`, `note`. Подробно — `svyazka help`.
 
@@ -137,7 +138,7 @@ Codex выполняет команды в песочнице, которая н
 
 ## Статус
 
-macOS, Windows и Linux. Интерфейс на русском (английский — следующим), дальше — MCP-сервер для других агентов,
+macOS, Windows и Linux. Интерфейс на русском и английском (по языку системы; `svyazka config lang ru|en` или Настройки → Язык), дальше — MCP-сервер для других агентов,
 см. [CHANGELOG](CHANGELOG.md). Окна Windows и Windows Hello CI проверяет только до момента, где нужен человек, —
 отзывы пользователей Windows очень пригодятся. Помощь приветствуется: [CONTRIBUTING.md](CONTRIBUTING.md).
 

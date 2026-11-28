@@ -46,6 +46,10 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$B/Svyazka" "$APP/Contents/MacOS/Svyazka"
 cp "$B/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+# имя в Finder, Dock и Spotlight — по языку системы (папка остаётся Связка.app)
+mkdir -p "$APP/Contents/Resources/ru.lproj" "$APP/Contents/Resources/en.lproj"
+printf '"CFBundleDisplayName" = "Связка";\n"CFBundleName" = "Связка";\n' > "$APP/Contents/Resources/ru.lproj/InfoPlist.strings"
+printf '"CFBundleDisplayName" = "Svyazka";\n"CFBundleName" = "Svyazka";\n' > "$APP/Contents/Resources/en.lproj/InfoPlist.strings"
 cat > "$APP/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -61,12 +65,14 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>CFBundleDevelopmentRegion</key><string>ru</string>
+  <key>LSHasLocalizedDisplayName</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
   <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
 </dict>
 </plist>
 EOF
 cp "$B/svyazka-touchid" "$OUT/svyazka-touchid"
-codesign --force -s - "$OUT/svyazka-touchid" >/dev/null
-codesign --force -s - "$APP" >/dev/null
+codesign --force -s - "$OUT/svyazka-touchid" >/dev/null 2>&1
+codesign --force -s - "$APP" >/dev/null 2>&1
 echo "Готово: $OUT/svyazka-touchid, $APP ($(lipo -archs "$OUT/svyazka-touchid"))"

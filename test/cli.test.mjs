@@ -14,7 +14,7 @@ const win = process.platform === 'win32';
 function sandbox(extra = {}) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-'));
   const env = { ...process.env, SVYAZKA_HOME: home, SVYAZKA_SYNC_DIR: path.join(home, 'sync'), SVYAZKA_TEST: '1',
-    SVYAZKA_TEST_PASSWORD: 'test-pass-123', SVYAZKA_TEST_CONFIRM: '1', ...extra };
+    SVYAZKA_TEST_PASSWORD: 'test-pass-123', SVYAZKA_TEST_CONFIRM: '1', SVYAZKA_LANG: 'ru', ...extra };
   delete env.CLAUDECODE;
   for (const k of Object.keys(env)) if (k.startsWith('CODEX_')) delete env[k];
   const run = (args, opts = {}) => {
@@ -187,4 +187,34 @@ test('окно приложения не открывается само, есл
   assert.equal(r.status, 401, 'неверный пароль не принимается, даже когда агент открыт');
   assert.equal((await r.json()).code, 'BAD_PASSWORD');
   assert.equal((await post({ password: 'test-pass-123' })).status, 200);
+});
+
+test('английский: SVYAZKA_LANG=en — ошибки, справка, настройки', (t) => {
+  const s = sandbox({ SVYAZKA_LANG: 'en' }); t.after(s.stop);
+  assert.match(s.run(['help']).stdout.split('\n')[0], /^svyazka — Svyazka: a keychain for people and AI agents/);
+  assert.equal(s.run(['init']).status, 0);
+  let r = s.run(['ls', 'no-such-shelf']);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /No shelf "no-such-shelf"/);
+  r = s.run(['add', 'note', 'n1', '--text', 'hello']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^Added:\nMisc \/ n1  \[note\]/);
+  assert.match(s.run(['status']).stdout, /^Unlocked: 1 item on 1 shelf,/);
+  assert.match(s.run(['frobnicate']).stderr, /Unknown command "frobnicate"/);
+  assert.match(s.run(['config']).stdout, /^vault: /);
+  assert.equal(s.run(['config', 'lang', 'ru']).stdout.trim(), 'Язык: русский');
+  assert.equal(s.run(['config', 'lang', 'en']).stdout.trim(), 'Language: English');
+  // --json не меняется от языка
+  assert.deepEqual(Object.keys(JSON.parse(s.run(['show', 'n1', '--json']).stdout)), ['id', 'shelf', 'type', 'title', 'fields', 'secrets', 'updated']);
+});
+
+test('svyazka config lang en важнее SVYAZKA_LANG — и в команде, и в агенте', (t) => {
+  const s = sandbox(); t.after(s.stop); // SVYAZKA_LANG=ru
+  s.run(['init']);
+  assert.match(s.run(['ls', 'нет-такой']).stderr, /Нет полки «нет-такой»/);
+  assert.equal(s.run(['config', 'lang', 'en']).stdout.trim(), 'Language: English');
+  assert.match(s.run(['ls', 'nope']).stderr, /No shelf "nope"/, 'агент уже запущен — язык читается на каждый запрос');
+  assert.match(s.run(['bogus']).stderr, /Unknown command "bogus"/);
+  assert.match(s.run(['config', 'lang', 'auto']).stdout, /Язык: русский/);
+  assert.match(s.run(['ls', 'nope']).stderr, /Нет полки «nope»/);
 });

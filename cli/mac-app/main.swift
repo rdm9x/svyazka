@@ -6,6 +6,10 @@
 import Cocoa
 import WebKit
 
+// Язык меню — тот же, что у интерфейса: агент отдаёт адрес с ?lang=ru|en
+var english = false
+func L(_ ru: String, _ en: String) -> String { english ? en : ru }
+
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
   var window: NSWindow!
   var web: WKWebView!
@@ -50,13 +54,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       let res = Self.svyazka(["ui", "--print"])
       DispatchQueue.main.async {
         if let s = res.out, s.hasPrefix("http://127.0.0.1"), let u = URL(string: s) {
+          let en = URLComponents(url: u, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "lang" }?.value == "en"
+          if en != english { english = en; self.buildMenu() }
+          self.window.title = L("Связка", "Svyazka")
           self.web.load(URLRequest(url: u))
         } else {
           let msg = (res.err ?? "").replacingOccurrences(of: "<", with: "&lt;")
           self.web.loadHTMLString("""
             <body style="font:15px -apple-system;padding:48px 32px;color:#888">
-            <h2 style="color:#ccc;font-weight:600">Связка не запустилась</h2>
-            <p>\(msg)</p><p>Проверьте в Терминале: <code>svyazka status</code>. Обновить окно — ⌘R.</p></body>
+            <h2 style="color:#ccc;font-weight:600">\(L("Связка не запустилась", "Svyazka didn't start"))</h2>
+            <p>\(msg)</p><p>\(L("Проверьте в Терминале", "Check in Terminal")): <code>svyazka status</code>. \(L("Обновить окно — ⌘R.", "Reload the window — ⌘R."))</p></body>
             """, baseURL: nil)
         }
       }
@@ -122,30 +129,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     let appItem = NSMenuItem()
     main.addItem(appItem)
     let appMenu = NSMenu()
-    appMenu.addItem(withTitle: "Обновить", action: #selector(reloadUI), keyEquivalent: "r")
+    appMenu.addItem(withTitle: L("Обновить", "Reload"), action: #selector(reloadUI), keyEquivalent: "r")
     appMenu.addItem(.separator())
-    appMenu.addItem(withTitle: "Скрыть Связку", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-    appMenu.addItem(withTitle: "Завершить Связку", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+    appMenu.addItem(withTitle: L("Скрыть Связку", "Hide Svyazka"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+    appMenu.addItem(withTitle: L("Завершить Связку", "Quit Svyazka"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     appItem.submenu = appMenu
 
     let editItem = NSMenuItem()
     main.addItem(editItem)
-    let edit = NSMenu(title: "Правка")
-    edit.addItem(withTitle: "Отменить", action: Selector(("undo:")), keyEquivalent: "z")
-    let redo = edit.addItem(withTitle: "Повторить", action: Selector(("redo:")), keyEquivalent: "z")
+    let edit = NSMenu(title: L("Правка", "Edit"))
+    edit.addItem(withTitle: L("Отменить", "Undo"), action: Selector(("undo:")), keyEquivalent: "z")
+    let redo = edit.addItem(withTitle: L("Повторить", "Redo"), action: Selector(("redo:")), keyEquivalent: "z")
     redo.keyEquivalentModifierMask = [.command, .shift]
     edit.addItem(.separator())
-    edit.addItem(withTitle: "Вырезать", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-    edit.addItem(withTitle: "Скопировать", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-    edit.addItem(withTitle: "Вставить", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-    edit.addItem(withTitle: "Выбрать всё", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+    edit.addItem(withTitle: L("Вырезать", "Cut"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+    edit.addItem(withTitle: L("Скопировать", "Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+    edit.addItem(withTitle: L("Вставить", "Paste"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+    edit.addItem(withTitle: L("Выбрать всё", "Select All"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
     editItem.submenu = edit
 
     let winItem = NSMenuItem()
     main.addItem(winItem)
-    let win = NSMenu(title: "Окно")
-    win.addItem(withTitle: "Свернуть", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
-    win.addItem(withTitle: "Закрыть", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+    let win = NSMenu(title: L("Окно", "Window"))
+    win.addItem(withTitle: L("Свернуть", "Minimize"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+    win.addItem(withTitle: L("Закрыть", "Close"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
     winItem.submenu = win
     NSApp.mainMenu = main
   }

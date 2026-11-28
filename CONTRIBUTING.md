@@ -8,6 +8,7 @@ end to end.
 
 | Path | What |
 |---|---|
+| `i18n.js`, `lang/` | languages: `t('Русский текст')` and the English dictionaries |
 | `core.js` | vault format, encryption, merge, import, payments — shared by the UI and the CLI |
 | `app.js`, `styles.css`, `index.html` | desktop UI (served by the agent, shown in `Связка.app` / `svyazka ui`) |
 | `cli/svyazka.mjs` | the `svyazka` command and the background agent |
@@ -44,7 +45,9 @@ svyazka init && svyazka ui
 - Anything touching crypto, the vault format, the agent socket or redaction: explain the reasoning in the PR —
   these get extra review.
 - Never log, print or commit secret values, including in tests and examples (use `example.com`, `203.0.113.x`).
-- UI text is Russian for now; English localisation is planned — keep strings easy to extract.
+- Text is written in Russian and wrapped in `t('…')` (see `i18n.js`); add the English to `lang/en-app.js` (window) or
+  `lang/en-cli.js` (command, dialogs). Keys are single-quoted literals with `{0}` placeholders — `test/i18n.test.mjs`
+  checks every key is translated; `node test/i18n-left.mjs <file>` lists strings not wrapped yet.
 
 ## Releases
 

@@ -2,8 +2,24 @@
 
 import { ITER, uid, rand, deriveKey, seal, openVault, decryptWith, importRaw, b64d, newVault, normalize, mergeData, tombstone, isVaultBlob, isPlainImport,
   addMonths, todayISO, markPaid, planPlainImport } from './core.js';
+import { makeT, setLang, lang, langFromTag, locale, plural } from './i18n.js';
+import EN from './lang/en-app.js';
 
-const VERSION = '1.5.0';
+/* ───────────── язык ───────────── */
+
+// ?lang= от агента → выбор в этом браузере (без агента) → язык системы
+const LANG_KEY = 'svyazka.lang';
+const t = makeT({ en: EN });
+{
+  let l = null;
+  try { l = new URLSearchParams(location.search).get('lang'); } catch {}
+  if (l !== 'ru' && l !== 'en') { try { l = localStorage.getItem(LANG_KEY); } catch {} }
+  setLang(l === 'ru' || l === 'en' ? l : langFromTag(navigator.language));
+  document.documentElement.lang = lang();
+  document.title = t('Связка');
+}
+
+const VERSION = '1.6.0';
 
 const $ = (s, r = document) => r.querySelector(s);
 const app = $('#app');
@@ -20,31 +36,25 @@ function fmtDate(iso) {
   const d = new Date(iso + 'T00:00:00');
   const opts = { day: 'numeric', month: 'short' };
   if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
-  return d.toLocaleDateString('ru-RU', opts);
+  return d.toLocaleDateString(locale(), opts);
 }
 function fmtDateShort(iso) {
   const d = new Date(iso + 'T00:00:00');
   return Math.abs(daysTo(iso)) < 300
-    ? d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '')
-    : d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    ? d.toLocaleDateString(locale(), { day: 'numeric', month: 'short' }).replace('.', '')
+    : d.toLocaleDateString(locale(), { day: '2-digit', month: '2-digit', year: '2-digit' });
 }
-const fmtDateTime = (ts) => new Date(ts).toLocaleString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const fmtDateTime = (ts) => new Date(ts).toLocaleString(locale(), { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-function plural(n, one, few, many) {
-  const m10 = n % 10, m100 = n % 100;
-  if (m10 === 1 && m100 !== 11) return one;
-  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
-  return many;
-}
-const nDays = (n) => `${n} ${plural(n, 'день', 'дня', 'дней')}`;
-const nItems = (n) => `${n} ${plural(n, 'запись', 'записи', 'записей')}`;
+const nDays = (n) => plural(n, ['день', 'дня', 'дней'], ['day', 'days']);
+const nItems = (n) => plural(n, ['запись', 'записи', 'записей'], ['item', 'items']);
 
 function fmtMoney(a, cur) {
   const n = parseFloat(a);
   if (!isFinite(n)) return '—';
   const fd = Math.abs(n % 1) > 0.004 ? 2 : 0;
   try {
-    return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: cur || 'RUB', minimumFractionDigits: fd, maximumFractionDigits: fd }).format(n);
+    return new Intl.NumberFormat(locale(), { style: 'currency', currency: cur || 'RUB', minimumFractionDigits: fd, maximumFractionDigits: fd }).format(n);
   } catch {
     return `${n.toFixed(fd)} ${cur || ''}`.trim();
   }
@@ -53,7 +63,7 @@ function fmtMoney(a, cur) {
 /* ───────────── theme ───────────── */
 
 const THEME_KEY = 'svyazka.theme';
-const THEMES = [['auto', 'Авто'], ['light', 'Светлая'], ['dark', 'Тёмная']];
+const THEMES = [['auto', t('Авто')], ['light', t('Светлая')], ['dark', t('Тёмная')]];
 const getTheme = () => { try { return localStorage.getItem(THEME_KEY) || 'auto'; } catch { return 'auto'; } };
 function applyTheme(t) {
   const root = document.documentElement;
@@ -80,7 +90,7 @@ const store = (() => {
   let token = null;
   try {
     const q = new URLSearchParams(location.search).get('t');
-    if (q) { sessionStorage.setItem('svyazka.t', q); history.replaceState(null, '', location.pathname + location.hash); }
+    if (q) { sessionStorage.setItem('svyazka.t', q); history.replaceState(null, '', location.pathname + '?lang=' + lang() + location.hash); }
     token = sessionStorage.getItem('svyazka.t');
   } catch {}
   let cache = null;
@@ -89,14 +99,14 @@ const store = (() => {
     ready: !!token,
     async fetchRemote() {
       const r = await api('GET');
-      if (!r.ok) throw new Error('агент Связки не отвечает');
+      if (!r.ok) throw new Error(t('агент Связки не отвечает'));
       return r.status === 204 ? null : await r.text();
     },
     async init() { cache = await this.fetchRemote(); },
     get: () => cache,
     async set(v) {
       const r = await api('PUT', v);
-      if (!r.ok) throw new Error('Не удалось сохранить файл');
+      if (!r.ok) throw new Error(t('Не удалось сохранить файл'));
       cache = v;
     },
     async remove() { await api('DELETE'); cache = null; },
@@ -107,6 +117,12 @@ const store = (() => {
       return { ok: r.ok, ...(await r.json().catch(() => ({}))) };
     },
     lockAgent() { return fetch('/api/lock', { method: 'POST', headers: { 'X-Svyazka-Token': token } }).catch(() => {}); },
+    // язык окна → настройки агента (общие с svyazka config lang)
+    async setLang(l) {
+      const r = await fetch('/api/lang', { method: 'POST', headers: { 'X-Svyazka-Token': token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lang: l }), cache: 'no-store' }).catch(() => null);
+      return !!r?.ok;
+    },
   };
 })();
 
@@ -131,7 +147,7 @@ const hasVault = () => !!store.get();
 const shelf = (id) => S.data.shelves.find((s) => s.id === id);
 const item = (id) => S.data.items.find((i) => i.id === id);
 const itemsIn = (sid) => S.data.items.filter((i) => i.shelfId === sid);
-const shelvesSorted = () => [...S.data.shelves].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+const shelvesSorted = () => [...S.data.shelves].sort((a, b) => a.name.localeCompare(b.name, locale()));
 
 /* ───────────── definitions ───────────── */
 
@@ -162,39 +178,41 @@ const I = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
   moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
   auto: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/>',
+  globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.5 3.5 5.3 3.5 8.5s-1.1 6-3.5 8.5c-2.4-2.5-3.5-5.3-3.5-8.5s1.1-6 3.5-8.5z"/>',
   shield: '<path d="M12 3 5 6v5.5c0 4.5 3 8 7 9.5 4-1.5 7-5 7-9.5V6z"/><path d="m9 12 2 2 4-4"/>',
 };
 
 const TYPES = {
-  password: { label: 'Пароль', icon: 'key', ph: 'GitHub', desc: 'Логин и пароль от сайта, панели, почты', fields: [
-    { k: 'login', l: 'Логин / e-mail', al: 'Логин' },
-    { k: 'password', l: 'Пароль', secret: 1, gen: 1, mono: 1 },
-    { k: 'url', l: 'Адрес', url: 1, ph: 'https://' },
-    { k: 'note', l: 'Заметка', multi: 1 },
+  password: { label: t('Пароль'), icon: 'key', ph: 'GitHub', desc: t('Логин и пароль от сайта, панели, почты'), fields: [
+    { k: 'login', l: t('Логин / e-mail'), al: t('Логин') },
+    { k: 'password', l: t('Пароль'), secret: 1, gen: 1, mono: 1 },
+    { k: 'url', l: t('Адрес'), url: 1, ph: 'https://' },
+    { k: 'note', l: t('Заметка'), multi: 1 },
   ] },
-  ssh: { label: 'SSH', icon: 'terminal', ph: 'VPS-1 · root', desc: 'Хост, пользователь, ключи', fields: [
-    { k: 'host', l: 'Хост', mono: 1, ph: '203.0.113.10' },
-    { k: 'user', l: 'Пользователь', mono: 1, ph: 'root' },
-    { k: 'port', l: 'Порт', mono: 1, ph: '22', num: 1 },
-    { k: 'privateKey', l: 'Приватный ключ', secret: 1, multi: 1, mono: 1, ph: '-----BEGIN OPENSSH PRIVATE KEY-----' },
-    { k: 'publicKey', l: 'Публичный ключ', multi: 1, mono: 1, ph: 'ssh-ed25519 AAAA…' },
-    { k: 'passphrase', l: 'Passphrase / пароль', al: 'Пароль', secret: 1, gen: 1, mono: 1 },
-    { k: 'note', l: 'Заметка', multi: 1 },
+  ssh: { label: 'SSH', icon: 'terminal', ph: 'VPS-1 · root', desc: t('Хост, пользователь, ключи'), fields: [
+    { k: 'host', l: t('Хост'), mono: 1, ph: '203.0.113.10' },
+    { k: 'user', l: t('Пользователь'), mono: 1, ph: 'root' },
+    { k: 'port', l: t('Порт'), mono: 1, ph: '22', num: 1 },
+    { k: 'privateKey', l: t('Приватный ключ'), secret: 1, multi: 1, mono: 1, ph: '-----BEGIN OPENSSH PRIVATE KEY-----' },
+    { k: 'publicKey', l: t('Публичный ключ'), multi: 1, mono: 1, ph: 'ssh-ed25519 AAAA…' },
+    { k: 'passphrase', l: t('Passphrase / пароль'), al: t('Пароль'), secret: 1, gen: 1, mono: 1 },
+    { k: 'note', l: t('Заметка'), multi: 1 },
   ] },
-  token: { label: 'Токен', icon: 'token', ph: 'Cloudflare API', desc: 'API-ключ или токен со сроком действия', fields: [
-    { k: 'value', l: 'Значение', secret: 1, multi: 1, mono: 1 },
-    { k: 'usage', l: 'Где используется' },
-    { k: 'expires', l: 'Истекает', date: 1 },
-    { k: 'note', l: 'Заметка', multi: 1 },
+  token: { label: t('Токен'), icon: 'token', ph: 'Cloudflare API', desc: t('API-ключ или токен со сроком действия'), fields: [
+    { k: 'value', l: t('Значение'), secret: 1, multi: 1, mono: 1 },
+    { k: 'usage', l: t('Где используется') },
+    { k: 'expires', l: t('Истекает'), date: 1 },
+    { k: 'note', l: t('Заметка'), multi: 1 },
   ] },
-  payment: { label: 'Оплата', icon: 'card', ph: 'Аренда VPS', desc: 'VPS, домен, подписка — с напоминанием', fields: [] },
-  note: { label: 'Заметка', icon: 'note', ph: 'Сетевые настройки', desc: 'IP-адреса, конфиги, инструкции', fields: [
-    { k: 'text', l: 'Текст', multi: 1, big: 1 },
+  payment: { label: t('Оплата'), icon: 'card', ph: t('Аренда VPS'), desc: t('VPS, домен, подписка — с напоминанием'), fields: [] },
+  note: { label: t('Заметка'), icon: 'note', ph: t('Сетевые настройки'), desc: t('IP-адреса, конфиги, инструкции'), fields: [
+    { k: 'text', l: t('Текст'), multi: 1, big: 1 },
   ] },
 };
 const TYPE_ORDER = ['payment', 'password', 'ssh', 'token', 'note'];
 
-const PERIODS = [[1, 'Ежемесячно', 'мес'], [3, 'Раз в квартал', 'квартал'], [6, 'Раз в полгода', 'полгода'], [12, 'Ежегодно', 'год'], [24, 'Раз в 2 года', '2 года'], [36, 'Раз в 3 года', '3 года'], [0, 'Разово', 'разово']];
+const PERIODS = [[1, t('Ежемесячно'), t('мес')], [3, t('Раз в квартал'), t('квартал')], [6, t('Раз в полгода'), t('полгода')], [12, t('Ежегодно'), t('год')],
+  [24, t('Раз в 2 года'), t('2 года')], [36, t('Раз в 3 года'), t('3 года')], [0, t('Разово'), t('разово')]];
 const periodShort = (p) => (PERIODS.find((x) => x[0] === +p) || PERIODS[0])[2];
 const CURRENCIES = ['RUB', 'USD', 'EUR', 'GBP', 'KZT', 'UAH', 'BYN', 'TRY', 'GEL', 'AMD', 'CNY', 'USDT'];
 const COLORS = ['#7aa2ff', '#5fe0a8', '#ffc266', '#ff7eb6', '#b18cff', '#5ad1f0', '#ff8a5c', '#a3aec2'];
@@ -202,18 +220,18 @@ const COLORS = ['#7aa2ff', '#5fe0a8', '#ffc266', '#ff7eb6', '#b18cff', '#5ad1f0'
 /* ───────────── derived ───────────── */
 
 function totals() {
-  const t = {};
+  const sum = {};
   for (const it of S.data.items) {
     if (it.type !== 'payment' || it.f.done) continue;
     const p = +it.f.period, a = parseFloat(it.f.amount);
     if (!p || !isFinite(a)) continue;
-    t[it.f.currency] = (t[it.f.currency] || 0) + a / p;
+    sum[it.f.currency] = (sum[it.f.currency] || 0) + a / p;
   }
-  return t;
+  return sum;
 }
-const fmtTotals = (t, mul) => {
-  const ks = Object.keys(t);
-  return ks.length ? ks.sort((a, b) => t[b] - t[a]).map((k) => `<span>${esc(fmtMoney(t[k] * mul, k))}</span>`).join('') : '—';
+const fmtTotals = (sum, mul) => {
+  const ks = Object.keys(sum);
+  return ks.length ? ks.sort((a, b) => sum[b] - sum[a]).map((k) => `<span>${esc(fmtMoney(sum[k] * mul, k))}</span>`).join('') : '—';
 };
 
 function dueOf(it) {
@@ -227,11 +245,11 @@ function dueList() {
 function dueChip(d, long = false) {
   const n = d.days;
   const exp = d.kind === 'exp';
-  if (n < 0) return `<span class="chip red">${long ? (exp ? 'истёк ' : 'просрочено на ') + nDays(-n) : (exp ? 'истёк' : '−' + -n + ' дн.')}</span>`;
-  if (n === 0) return `<span class="chip red">${exp ? 'истекает сегодня' : 'сегодня'}</span>`;
-  if (n === 1) return `<span class="chip amber">завтра</span>`;
-  if (n <= d.warn) return `<span class="chip amber">${long ? 'через ' + nDays(n) : n + ' дн.'}</span>`;
-  return `<span class="chip">${long ? 'через ' + nDays(n) : fmtDateShort(d.date)}</span>`;
+  if (n < 0) return `<span class="chip red">${long ? (exp ? t('истёк {0}', nDays(-n)) : t('просрочено на {0}', nDays(-n))) : (exp ? t('истёк') : t('−{0} дн.', -n))}</span>`;
+  if (n === 0) return `<span class="chip red">${exp ? t('истекает сегодня') : t('сегодня')}</span>`;
+  if (n === 1) return `<span class="chip amber">${t('завтра')}</span>`;
+  if (n <= d.warn) return `<span class="chip amber">${long ? t('через {0}', nDays(n)) : t('{0} дн.', n)}</span>`;
+  return `<span class="chip">${long ? t('через {0}', nDays(n)) : fmtDateShort(d.date)}</span>`;
 }
 
 function subtitle(it) {
@@ -240,7 +258,7 @@ function subtitle(it) {
     case 'password': return f.login || (f.url || '').replace(/^https?:\/\//, '');
     case 'ssh': return f.host ? `${f.user ? f.user + '@' : ''}${f.host}${f.port && f.port !== '22' ? ':' + f.port : ''}` : '';
     case 'token': return f.usage || '';
-    case 'payment': return f.done ? 'оплачено' : `${fmtMoney(f.amount, f.currency)} / ${periodShort(f.period)}`;
+    case 'payment': return f.done ? t('оплачено') : `${fmtMoney(f.amount, f.currency)} / ${periodShort(f.period)}`;
     case 'note': return (f.text || '').split('\n')[0];
   }
   return '';
@@ -251,7 +269,7 @@ const ACCESS_ORDER = { password: ['url', 'login', 'password', 'note'] };
 const HAS_QUICK = new Set(['password', 'ssh', 'token']);
 
 function accessText(it) {
-  const t = TYPES[it.type], f = it.f;
+  const ty = TYPES[it.type], f = it.f;
   if (it.type === 'note') return [it.title, f.text].filter(Boolean).join('\n\n');
   const lines = [it.title];
   const add = (l, v) => {
@@ -260,16 +278,16 @@ function accessText(it) {
     lines.push(v.includes('\n') ? `${l}:\n${v}` : `${l}: ${v}`);
   };
   if (it.type === 'payment') {
-    add('Сумма', `${fmtMoney(f.amount, f.currency)} / ${periodShort(f.period)}`);
-    if (!f.done) add('Следующий платёж', fmtDate(f.nextDate));
-    add('Чем платить', f.method);
-    add('Где оплачивать', f.url);
-    add('Заметка', f.note);
+    add(t('Сумма'), `${fmtMoney(f.amount, f.currency)} / ${periodShort(f.period)}`);
+    if (!f.done) add(t('Следующий платёж'), fmtDate(f.nextDate));
+    add(t('Чем платить'), f.method);
+    add(t('Где оплачивать'), f.url);
+    add(t('Заметка'), f.note);
   } else {
-    if (it.type === 'ssh' && f.host) add('Подключение', sshCmd(f));
-    const order = ACCESS_ORDER[it.type] || t.fields.map((x) => x.k);
+    if (it.type === 'ssh' && f.host) add(t('Подключение'), sshCmd(f));
+    const order = ACCESS_ORDER[it.type] || ty.fields.map((x) => x.k);
     for (const k of order) {
-      const fd = t.fields.find((x) => x.k === k);
+      const fd = ty.fields.find((x) => x.k === k);
       add(fd.al || fd.l, fd.date ? fmtDate(f[k]) : f[k]);
     }
   }
@@ -280,23 +298,23 @@ function accessText(it) {
 
 function top(title, right = '', back = null, cls = '') {
   return `<header class="top ${cls}">
-    ${back ? `<a class="icon-btn glass" href="${back}" aria-label="Назад">${ic(I.back)}</a>` : ''}
+    ${back ? `<a class="icon-btn glass" href="${back}" aria-label="${t('Назад')}">${ic(I.back)}</a>` : ''}
     <h1>${title}</h1>
     <div class="top-actions">${right}</div>
   </header>`;
 }
 
 function row(it, showShelf = false, quick = false) {
-  const t = TYPES[it.type];
+  const ty = TYPES[it.type];
   const sh = showShelf ? shelf(it.shelfId)?.name : '';
   const d = dueOf(it);
-  const chip = d && (it.type === 'payment' || d.days <= d.warn) ? dueChip(d) : (it.type === 'payment' && it.f.done ? '<span class="chip green">оплачено</span>' : '');
+  const chip = d && (it.type === 'payment' || d.days <= d.warn) ? dueChip(d) : (it.type === 'payment' && it.f.done ? `<span class="chip green">${t('оплачено')}</span>` : '');
   const sub = [subtitle(it), sh].filter(Boolean).join(' · ');
   return `<a class="row" href="#/item/${it.id}">
-    <span class="ti t-${it.type}">${ic(I[t.icon])}</span>
+    <span class="ti t-${it.type}">${ic(I[ty.icon])}</span>
     <span class="rt"><b>${esc(it.title)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span>
     ${chip}
-    ${quick && HAS_QUICK.has(it.type) ? `<button class="mini quick" data-act="copy-access" data-id="${it.id}" aria-label="Скопировать доступ">${ic(I.copy)}</button>` : ''}
+    ${quick && HAS_QUICK.has(it.type) ? `<button class="mini quick" data-act="copy-access" data-id="${it.id}" aria-label="${t('Скопировать доступ')}">${ic(I.copy)}</button>` : ''}
   </a>`;
 }
 
@@ -308,8 +326,8 @@ function fld(f, v, name) {
   if (f.multi) input = `<textarea ${common} rows="${f.big ? 9 : f.mono ? 5 : 3}" class="${f.mono ? 'mono' : ''} ${f.secret ? 'secret-ta' : ''}">${esc(v)}</textarea>`;
   else if (f.date) input = `<input type="date" name="${name}" value="${esc(v)}">`;
   else input = `<input type="${f.secret ? 'password' : 'text'}" ${common} value="${esc(v)}" class="${f.mono ? 'mono' : ''}" ${f.num ? 'inputmode="numeric"' : ''} ${f.url ? 'inputmode="url"' : ''} ${f.req ? 'required' : ''}>`;
-  const tools = (f.secret ? `<button type="button" class="mini" data-act="toggle-vis" aria-label="Показать">${ic(I.eye)}</button>` : '')
-    + (f.gen ? `<button type="button" class="mini" data-act="gen" aria-label="Сгенерировать">${ic(I.dice)}</button>` : '');
+  const tools = (f.secret ? `<button type="button" class="mini" data-act="toggle-vis" aria-label="${t('Показать')}">${ic(I.eye)}</button>` : '')
+    + (f.gen ? `<button type="button" class="mini" data-act="gen" aria-label="${t('Сгенерировать')}">${ic(I.dice)}</button>` : '');
   return `<label class="f"><span>${esc(f.l)}</span><div class="in ${tools ? 'has-tools' : ''} ${f.multi ? 'multi' : ''}">${input}${tools ? `<div class="tools">${tools}</div>` : ''}</div></label>`;
 }
 
@@ -319,7 +337,7 @@ function linkify(v) {
   return href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(s)}</a>` : esc(s);
 }
 
-const maskOf = (v, f) => (f.multi ? `•••••••• <em>${v.split('\n').length} стр.</em>` : '••••••••••');
+const maskOf = (v, f) => (f.multi ? `•••••••• <em>${t('{0} стр.', v.split('\n').length)}</em>` : '••••••••••');
 
 function viewField(it, f) {
   const v = it.f[f.k];
@@ -329,8 +347,8 @@ function viewField(it, f) {
     <div class="fl">${esc(f.l)}</div>
     <div class="fval ${f.mono ? 'mono' : ''} ${f.multi ? 'multi' : ''} ${f.secret ? 'masked' : ''}">${shown}</div>
     <div class="fa">
-      ${f.secret ? `<button class="mini" data-act="reveal" data-id="${it.id}" data-k="${f.k}" aria-label="Показать">${ic(I.eye)}</button>` : ''}
-      <button class="mini" data-act="copy" data-id="${it.id}" data-k="${f.k}" aria-label="Скопировать">${ic(I.copy)}</button>
+      ${f.secret ? `<button class="mini" data-act="reveal" data-id="${it.id}" data-k="${f.k}" aria-label="${t('Показать')}">${ic(I.eye)}</button>` : ''}
+      <button class="mini" data-act="copy" data-id="${it.id}" data-k="${f.k}" aria-label="${t('Скопировать')}">${ic(I.copy)}</button>
     </div>
   </div>`;
 }
@@ -344,25 +362,25 @@ function vLock() {
   const exists = hasVault();
   return `<section class="lock">
     <div class="logo glass">${ic(I.key)}</div>
-    <h1>Связка</h1>
-    <p class="muted" id="lock-hint">${exists ? (BIO ? `Приложите палец — ${BIO} — или введите мастер-пароль` : 'Введите мастер-пароль') : 'Придумайте мастер-пароль. Восстановить его нельзя — сохраните его в надёжном месте.'}</p>
-    ${exists && BIO ? `<button class="btn primary" data-act="bio">${ic(I.key)} Открыть с ${BIO}</button>` : ''}
+    <h1>${t('Связка')}</h1>
+    <p class="muted" id="lock-hint">${exists ? (BIO ? t('Приложите палец — {0} — или введите мастер-пароль', BIO) : t('Введите мастер-пароль')) : t('Придумайте мастер-пароль. Восстановить его нельзя — сохраните его в надёжном месте.')}</p>
+    ${exists && BIO ? `<button class="btn primary" data-act="bio">${ic(I.key)} ${t('Открыть с {0}', BIO)}</button>` : ''}
     <form id="f-lock" class="glass card stack" autocomplete="off">
-      <input type="password" name="pw" placeholder="Мастер-пароль" autocomplete="${exists ? 'current-password' : 'new-password'}" required>
-      ${exists ? '' : '<input type="password" name="pw2" placeholder="Повторите пароль" autocomplete="new-password" required>'}
+      <input type="password" name="pw" placeholder="${t('Мастер-пароль')}" autocomplete="${exists ? 'current-password' : 'new-password'}" required>
+      ${exists ? '' : `<input type="password" name="pw2" placeholder="${t('Повторите пароль')}" autocomplete="new-password" required>`}
       <p class="err" hidden></p>
-      <button class="btn ${exists && BIO ? 'ghost' : 'primary'}" type="submit">${exists ? 'Открыть паролем' : 'Создать хранилище'}</button>
+      <button class="btn ${exists && BIO ? 'ghost' : 'primary'}" type="submit">${exists ? t('Открыть паролем') : t('Создать хранилище')}</button>
     </form>
-    ${exists ? '' : `<button class="btn ghost" data-act="import">${ic(I.upload)} Восстановить из бэкапа</button>`}
-    <p class="foot muted">${ic(I.shield)} Данные шифруются и хранятся только на этом устройстве</p>
+    ${exists ? '' : `<button class="btn ghost" data-act="import">${ic(I.upload)} ${t('Восстановить из бэкапа')}</button>`}
+    <p class="foot muted">${ic(I.shield)} ${t('Данные шифруются и хранятся только на этом устройстве')}</p>
   </section>`;
 }
 
 function summaryCard() {
-  const t = totals();
+  const sum = totals();
   return `<section class="glass card summary">
-    <div><div class="label">В месяц</div><div class="big ${Object.keys(t).length > 1 ? 'multi' : ''}">${fmtTotals(t, 1)}</div></div>
-    <div><div class="label">В год</div><div class="big sm ${Object.keys(t).length > 1 ? 'multi' : ''}">${fmtTotals(t, 12)}</div></div>
+    <div><div class="label">${t('В месяц')}</div><div class="big ${Object.keys(sum).length > 1 ? 'multi' : ''}">${fmtTotals(sum, 1)}</div></div>
+    <div><div class="label">${t('В год')}</div><div class="big sm ${Object.keys(sum).length > 1 ? 'multi' : ''}">${fmtTotals(sum, 12)}</div></div>
   </section>`;
 }
 
@@ -371,14 +389,14 @@ function searchResults() {
   {
     const q = ui.q.trim().toLowerCase();
     const hits = d.items.filter((it) => {
-      const t = TYPES[it.type];
-      const hay = [it.title, shelf(it.shelfId)?.name, ...t.fields.filter((f) => !f.secret).map((f) => it.f[f.k]), it.f.method, it.f.note]
+      const ty = TYPES[it.type];
+      const hay = [it.title, shelf(it.shelfId)?.name, ...ty.fields.filter((f) => !f.secret).map((f) => it.f[f.k]), it.f.method, it.f.note]
         .filter(Boolean).join(' ').toLowerCase();
       return hay.includes(q);
     });
     return hits.length
       ? `<div class="glass list">${hits.map((i) => row(i, true)).join('')}</div>`
-      : `<div class="glass card empty">Ничего не найдено</div>`;
+      : `<div class="glass card empty">${t('Ничего не найдено')}</div>`;
   }
 }
 
@@ -391,8 +409,8 @@ function homeBody(desk = false) {
   if (d.items.length && (ago === null || ago >= 14)) {
     html += `<div class="glass banner">
       <span class="ti t-warn">${ic(I.alert)}</span>
-      <span class="rt"><b>${ago === null ? 'Бэкап ещё не делался' : `Бэкап был ${nDays(ago)} назад`}</b><small>Сохраните копию на случай потери диска</small></span>
-      <button class="pill" data-act="export">Сохранить</button>
+      <span class="rt"><b>${ago === null ? t('Бэкап ещё не делался') : t('Бэкап был {0} назад', nDays(ago))}</b><small>${t('Сохраните копию на случай потери диска')}</small></span>
+      <button class="pill" data-act="export">${t('Сохранить')}</button>
     </div>`;
   }
 
@@ -403,26 +421,26 @@ function homeBody(desk = false) {
   let soon = due.filter((x) => x.d.days <= Math.max(45, x.d.warn));
   if (!soon.length && due.length) soon = due.slice(0, 1);
   if (soon.length) {
-    html += `<h2 class="sec"><span>Скоро</span>${hasPay ? '<a href="#/payments">Все платежи</a>' : ''}</h2>
+    html += `<h2 class="sec"><span>${t('Скоро')}</span>${hasPay ? `<a href="#/payments">${t('Все платежи')}</a>` : ''}</h2>
       <div class="glass list">${soon.map((x) => row(x.it, true)).join('')}</div>`;
   } else if (hasPay) {
-    html += `<h2 class="sec"><span>Скоро</span><a href="#/payments">Все платежи</a></h2>`;
+    html += `<h2 class="sec"><span>${t('Скоро')}</span><a href="#/payments">${t('Все платежи')}</a></h2>`;
   }
 
-  if (desk && d.shelves.length) return html || `<div class="glass card empty">Платежей и сроков пока нет.<br>Добавьте оплату VPS или домена — здесь появятся напоминания.</div>`;
+  if (desk && d.shelves.length) return html || `<div class="glass card empty">${t('Платежей и сроков пока нет.')}<br>${t('Добавьте оплату VPS или домена — здесь появятся напоминания.')}</div>`;
   if (!d.shelves.length) {
     html += `<section class="glass card welcome stack">
-      <b>Начните с полки</b>
-      <p class="muted">Полка — это проект или сервис: «Hetzner VPS», «Домен example.com», «GitHub». На ней лежит всё, что к нему относится: пароли, SSH-ключи, токены и даты оплат.</p>
-      <a class="btn primary" href="#/shelfedit/new">${ic(I.plus)} Создать полку</a>
+      <b>${t('Начните с полки')}</b>
+      <p class="muted">${t('Полка — это проект или сервис: «Hetzner VPS», «Домен example.com», «GitHub». На ней лежит всё, что к нему относится: пароли, SSH-ключи, токены и даты оплат.')}</p>
+      <a class="btn primary" href="#/shelfedit/new">${ic(I.plus)} ${t('Создать полку')}</a>
     </section>`;
   } else {
-    html += `<h2 class="sec"><span>Полки</span></h2><div class="grid">
+    html += `<h2 class="sec"><span>${t('Полки')}</span></h2><div class="grid">
       ${shelvesSorted().map((s) => {
         const n = itemsIn(s.id).length;
         return `<a class="shelf glass" href="#/shelf/${s.id}" style="--c:${esc(s.color)}"><span class="dot"></span><b>${esc(s.name)}</b><small>${nItems(n)}</small></a>`;
       }).join('')}
-      <a class="shelf glass add" href="#/shelfedit/new">${ic(I.plus)}<small>Новая полка</small></a>
+      <a class="shelf glass add" href="#/shelfedit/new">${ic(I.plus)}<small>${t('Новая полка')}</small></a>
     </div>`;
   }
   return html;
@@ -430,31 +448,31 @@ function homeBody(desk = false) {
 
 function vHome() {
   const th = getTheme();
-  return `${top('Связка', `
-      <button class="icon-btn glass" data-act="theme-cycle" aria-label="Тема: ${THEMES.find((x) => x[0] === th)[1]}">${ic(I[th === 'auto' ? 'auto' : th === 'light' ? 'sun' : 'moon'])}</button>
-      <a class="icon-btn glass" href="#/settings" aria-label="Настройки">${ic(I.sliders)}</a>
-      <button class="icon-btn glass" data-act="lock" aria-label="Заблокировать">${ic(I.lock)}</button>`, null, 'home')}
-    <label class="search glass">${ic(I.search)}<input id="q" type="search" placeholder="Поиск" value="${esc(ui.q)}" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+  return `${top(t('Связка'), `
+      <button class="icon-btn glass" data-act="theme-cycle" aria-label="${t('Тема: {0}', THEMES.find((x) => x[0] === th)[1])}">${ic(I[th === 'auto' ? 'auto' : th === 'light' ? 'sun' : 'moon'])}</button>
+      <a class="icon-btn glass" href="#/settings" aria-label="${t('Настройки')}">${ic(I.sliders)}</a>
+      <button class="icon-btn glass" data-act="lock" aria-label="${t('Заблокировать')}">${ic(I.lock)}</button>`, null, 'home')}
+    <label class="search glass">${ic(I.search)}<input id="q" type="search" placeholder="${t('Поиск')}" value="${esc(ui.q)}" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
     <div id="home-body">${homeBody()}</div>
-    <a class="fab" href="#/new" aria-label="Добавить">${ic(I.plus)}</a>`;
+    <a class="fab" href="#/new" aria-label="${t('Добавить')}">${ic(I.plus)}</a>`;
 }
 
 function vShelf(s) {
-  const items = itemsIn(s.id).sort((a, b) => TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type) || a.title.localeCompare(b.title, 'ru'));
-  return `${top(`<i class="hdot" style="--c:${esc(s.color)}"></i>${esc(s.name)}`, `<a class="icon-btn glass" href="#/shelfedit/${s.id}" aria-label="Изменить полку">${ic(I.edit)}</a>`, '#/')}
+  const items = itemsIn(s.id).sort((a, b) => TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type) || a.title.localeCompare(b.title, locale()));
+  return `${top(`<i class="hdot" style="--c:${esc(s.color)}"></i>${esc(s.name)}`, `<a class="icon-btn glass" href="#/shelfedit/${s.id}" aria-label="${t('Изменить полку')}">${ic(I.edit)}</a>`, '#/')}
     ${items.length
       ? `<div class="glass list">${items.map((i) => row(i, false, true)).join('')}</div>`
-      : `<div class="glass card empty">Пока пусто.<br>Добавьте пароль, SSH-ключ или оплату.</div>`}
-    <a class="fab" href="#/new/${s.id}" aria-label="Добавить">${ic(I.plus)}</a>`;
+      : `<div class="glass card empty">${t('Пока пусто.')}<br>${t('Добавьте пароль, SSH-ключ или оплату.')}</div>`}
+    <a class="fab" href="#/new/${s.id}" aria-label="${t('Добавить')}">${ic(I.plus)}</a>`;
 }
 
 function vPicker(sid) {
   const s = sid && sid !== '-' && shelf(sid) ? sid : '-';
-  return `${top('Что добавить?', '', s !== '-' ? '#/shelf/' + s : '#/')}
-    <div class="types">${Object.entries(TYPES).map(([k, t]) => `
+  return `${top(t('Что добавить?'), '', s !== '-' ? '#/shelf/' + s : '#/')}
+    <div class="types">${Object.entries(TYPES).map(([k, ty]) => `
       <a class="type glass" href="#/new/${s}/${k}">
-        <span class="ti t-${k}">${ic(I[t.icon])}</span>
-        <span class="rt"><b>${t.label}</b><small>${t.desc}</small></span>
+        <span class="ti t-${k}">${ic(I[ty.icon])}</span>
+        <span class="rt"><b>${ty.label}</b><small>${ty.desc}</small></span>
       </a>`).join('')}
     </div>`;
 }
@@ -462,43 +480,43 @@ function vPicker(sid) {
 function payFields(f) {
   return `
     <div class="two">
-      ${fld({ k: 'amount', l: 'Сумма', ph: '500', num: 1 }, f.amount).replace('inputmode="numeric"', 'inputmode="decimal"')}
-      <label class="f"><span>Валюта</span><select name="f.currency">${[...new Set([...CURRENCIES, f.currency].filter(Boolean))].map((c) => `<option ${c === f.currency ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
+      ${fld({ k: 'amount', l: t('Сумма'), ph: '500', num: 1 }, f.amount).replace('inputmode="numeric"', 'inputmode="decimal"')}
+      <label class="f"><span>${t('Валюта')}</span><select name="f.currency">${[...new Set([...CURRENCIES, f.currency].filter(Boolean))].map((c) => `<option ${c === f.currency ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
     </div>
-    <label class="f"><span>Периодичность</span><select name="f.period">${PERIODS.map(([v, l]) => `<option value="${v}" ${+f.period === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <label class="f"><span>${t('Периодичность')}</span><select name="f.period">${PERIODS.map(([v, l]) => `<option value="${v}" ${+f.period === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     <div class="two">
-      <label class="f"><span>Следующий платёж</span><input type="date" name="f.nextDate" value="${esc(f.nextDate || '')}" required></label>
-      ${fld({ k: 'remind', l: 'Напомнить за, дней', ph: '7', num: 1 }, f.remind)}
+      <label class="f"><span>${t('Следующий платёж')}</span><input type="date" name="f.nextDate" value="${esc(f.nextDate || '')}" required></label>
+      ${fld({ k: 'remind', l: t('Напомнить за, дней'), ph: '7', num: 1 }, f.remind)}
     </div>
-    <label class="check"><input type="checkbox" name="f.autoRenew" ${f.autoRenew ? 'checked' : ''}><span>Автосписание с карты</span></label>
-    ${fld({ k: 'method', l: 'Чем платить', ph: 'Карта •• 1234', cap: 1 }, f.method)}
-    ${fld({ k: 'url', l: 'Где оплачивать', ph: 'https://', url: 1 }, f.url)}
-    ${fld({ k: 'note', l: 'Заметка', multi: 1, cap: 1 }, f.note)}`;
+    <label class="check"><input type="checkbox" name="f.autoRenew" ${f.autoRenew ? 'checked' : ''}><span>${t('Автосписание с карты')}</span></label>
+    ${fld({ k: 'method', l: t('Чем платить'), ph: t('Карта •• 1234'), cap: 1 }, f.method)}
+    ${fld({ k: 'url', l: t('Где оплачивать'), ph: 'https://', url: 1 }, f.url)}
+    ${fld({ k: 'note', l: t('Заметка'), multi: 1, cap: 1 }, f.note)}`;
 }
 
 function vEdit(it, isNew) {
-  const t = TYPES[it.type];
+  const ty = TYPES[it.type];
   const shelves = shelvesSorted();
   const opts = shelves.length
     ? shelves.map((s) => `<option value="${s.id}" ${s.id === it.shelfId ? 'selected' : ''}>${esc(s.name)}</option>`).join('')
-    : '<option value="__default">Разное</option>';
-  return `${top(isNew ? 'Новая запись' : 'Изменить', '', isNew ? '#/new/' + (it.shelfId || '-') : '#/item/' + it.id)}
+    : `<option value="__default">${t('Разное')}</option>`;
+  return `${top(isNew ? t('Новая запись') : t('Изменить'), '', isNew ? '#/new/' + (it.shelfId || '-') : '#/item/' + it.id)}
     <form id="f-item" class="stack" data-id="${it.id}" data-new="${isNew ? 1 : ''}" data-type="${it.type}" autocomplete="off">
       <div class="glass card stack">
-        <div class="tag"><span class="ti sm t-${it.type}">${ic(I[t.icon])}</span>${t.label}</div>
-        ${fld({ k: 'title', l: 'Название', ph: t.ph, req: 1, cap: 1 }, it.title, 'title')}
-        <label class="f"><span>Полка</span><select name="shelfId">${opts}<option value="__new">+ Новая полка…</option></select></label>
+        <div class="tag"><span class="ti sm t-${it.type}">${ic(I[ty.icon])}</span>${ty.label}</div>
+        ${fld({ k: 'title', l: t('Название'), ph: ty.ph, req: 1, cap: 1 }, it.title, 'title')}
+        <label class="f"><span>${t('Полка')}</span><select name="shelfId">${opts}<option value="__new">${t('+ Новая полка…')}</option></select></label>
       </div>
       <div class="glass card stack">
-        ${it.type === 'payment' ? payFields(it.f) : t.fields.map((f) => fld(f.k === 'note' || f.k === 'text' || f.k === 'usage' ? { ...f, cap: 1 } : f, it.f[f.k])).join('')}
+        ${it.type === 'payment' ? payFields(it.f) : ty.fields.map((f) => fld(f.k === 'note' || f.k === 'text' || f.k === 'usage' ? { ...f, cap: 1 } : f, it.f[f.k])).join('')}
       </div>
-      <button class="btn primary" type="submit">${ic(I.check)} Сохранить</button>
-      ${isNew ? '' : `<button class="btn danger" type="button" data-act="del-item" data-id="${it.id}">${ic(I.trash)} Удалить запись</button>`}
+      <button class="btn primary" type="submit">${ic(I.check)} ${t('Сохранить')}</button>
+      ${isNew ? '' : `<button class="btn danger" type="button" data-act="del-item" data-id="${it.id}">${ic(I.trash)} ${t('Удалить запись')}</button>`}
     </form>`;
 }
 
 function vItem(it) {
-  const t = TYPES[it.type];
+  const ty = TYPES[it.type];
   const sh = shelf(it.shelfId);
   const f = it.f;
   let body = '';
@@ -507,55 +525,55 @@ function vItem(it) {
     const next = +f.period && f.nextDate ? addMonths(f.nextDate, +f.period, f.anchor) : null;
     body = `<section class="glass card pay stack">
         <div class="amount">${esc(fmtMoney(f.amount, f.currency))}<small> / ${periodShort(f.period)}</small></div>
-        ${f.done ? '<div class="due-line"><span>Разовый платёж</span><span class="chip green">оплачено</span></div>'
-          : d ? `<div class="due-line"><span>Следующий платёж <b>${fmtDate(f.nextDate)}</b></span>${dueChip(d, true)}</div>` : ''}
-        ${!f.done && f.nextDate ? `<button class="btn primary" data-act="paid" data-id="${it.id}">${ic(I.check)} Оплачено${next ? `<small>→ ${fmtDate(next)}</small>` : ''}</button>` : ''}
+        ${f.done ? `<div class="due-line"><span>${t('Разовый платёж')}</span><span class="chip green">${t('оплачено')}</span></div>`
+          : d ? `<div class="due-line"><span>${t('Следующий платёж')} <b>${fmtDate(f.nextDate)}</b></span>${dueChip(d, true)}</div>` : ''}
+        ${!f.done && f.nextDate ? `<button class="btn primary" data-act="paid" data-id="${it.id}">${ic(I.check)} ${t('Оплачено')}${next ? `<small>→ ${fmtDate(next)}</small>` : ''}</button>` : ''}
       </section>
       <div class="glass list">
-        ${staticField('Автосписание', f.autoRenew ? 'Да' : 'Нет')}
-        ${staticField('Напомнить за', nDays(+f.remind || 7))}
-        ${viewField(it, { k: 'method', l: 'Чем платить' })}
-        ${viewField(it, { k: 'url', l: 'Где оплачивать', url: 1 })}
-        ${viewField(it, { k: 'note', l: 'Заметка', multi: 1 })}
+        ${staticField(t('Автосписание'), f.autoRenew ? t('Да') : t('Нет'))}
+        ${staticField(t('Напомнить за'), nDays(+f.remind || 7))}
+        ${viewField(it, { k: 'method', l: t('Чем платить') })}
+        ${viewField(it, { k: 'url', l: t('Где оплачивать'), url: 1 })}
+        ${viewField(it, { k: 'note', l: t('Заметка'), multi: 1 })}
       </div>
-      ${f.history?.length ? `<h2 class="sec"><span>История оплат</span></h2><div class="glass list">${f.history.slice(0, 12).map((h) => `
+      ${f.history?.length ? `<h2 class="sec"><span>${t('История оплат')}</span></h2><div class="glass list">${f.history.slice(0, 12).map((h) => `
         <div class="fv"><div class="fval">${fmtDate(h.date)}</div><div class="fa muted">${esc(fmtMoney(h.amount, h.currency))}</div></div>`).join('')}</div>` : ''}`;
   } else {
-    let rows = t.fields.map((fd) => viewField(it, fd)).join('');
+    let rows = ty.fields.map((fd) => viewField(it, fd)).join('');
     if (it.type === 'ssh' && f.host) {
       const cmd = sshCmd(f);
-      rows = `<div class="fv"><div class="fl">Подключение</div><div class="fval mono">${esc(cmd)}</div>
-        <div class="fa"><button class="mini" data-act="copy-text" data-text="${esc(cmd)}" aria-label="Скопировать">${ic(I.copy)}</button></div></div>` + rows;
+      rows = `<div class="fv"><div class="fl">${t('Подключение')}</div><div class="fval mono">${esc(cmd)}</div>
+        <div class="fa"><button class="mini" data-act="copy-text" data-text="${esc(cmd)}" aria-label="${t('Скопировать')}">${ic(I.copy)}</button></div></div>` + rows;
     }
     if (it.type === 'token' && f.expires) {
       const d = dueOf(it);
-      rows = `<div class="fv"><div class="fl">Срок</div><div class="fval">${dueChip({ ...d, warn: 30 }, true)}</div></div>` + rows;
+      rows = `<div class="fv"><div class="fl">${t('Срок')}</div><div class="fval">${dueChip({ ...d, warn: 30 }, true)}</div></div>` + rows;
     }
-    body = `<div class="glass list">${rows || '<div class="empty">Пусто</div>'}</div>`;
+    body = `<div class="glass list">${rows || `<div class="empty">${t('Пусто')}</div>`}</div>`;
   }
-  return `${top('', `<a class="icon-btn glass" href="#/edit/${it.id}" aria-label="Изменить">${ic(I.edit)}</a>`, sh ? '#/shelf/' + sh.id : '#/')}
+  return `${top('', `<a class="icon-btn glass" href="#/edit/${it.id}" aria-label="${t('Изменить')}">${ic(I.edit)}</a>`, sh ? '#/shelf/' + sh.id : '#/')}
     <div class="hero">
-      <span class="ti big t-${it.type}">${ic(I[t.icon])}</span>
-      <div><h1>${esc(it.title)}</h1><small class="muted">${t.label}${sh ? ' · ' + esc(sh.name) : ''}</small></div>
+      <span class="ti big t-${it.type}">${ic(I[ty.icon])}</span>
+      <div><h1>${esc(it.title)}</h1><small class="muted">${ty.label}${sh ? ' · ' + esc(sh.name) : ''}</small></div>
     </div>
     <div class="actions">
-      <button class="btn glass" data-act="copy-access" data-id="${it.id}">${ic(I.copy)} ${it.type === 'payment' ? 'Скопировать реквизиты' : it.type === 'note' ? 'Скопировать заметку' : 'Скопировать доступ'}</button>
+      <button class="btn glass" data-act="copy-access" data-id="${it.id}">${ic(I.copy)} ${it.type === 'payment' ? t('Скопировать реквизиты') : it.type === 'note' ? t('Скопировать заметку') : t('Скопировать доступ')}</button>
     </div>
     ${body}
-    <p class="foot muted">Изменено ${fmtDateTime(it.updated)}</p>`;
+    <p class="foot muted">${t('Изменено {0}', fmtDateTime(it.updated))}</p>`;
 }
 
 function vShelfEdit(s, isNew) {
-  return `${top(isNew ? 'Новая полка' : 'Полка', '', isNew ? '#/' : '#/shelf/' + s.id)}
+  return `${top(isNew ? t('Новая полка') : t('Полка'), '', isNew ? '#/' : '#/shelf/' + s.id)}
     <form id="f-shelf" class="stack" data-id="${s.id}" data-new="${isNew ? 1 : ''}">
       <div class="glass card stack">
-        ${fld({ k: 'name', l: 'Название', ph: 'Hetzner VPS', req: 1, cap: 1 }, s.name, 'name')}
-        <div class="f"><span>Цвет</span><div class="swatches">
+        ${fld({ k: 'name', l: t('Название'), ph: 'Hetzner VPS', req: 1, cap: 1 }, s.name, 'name')}
+        <div class="f"><span>${t('Цвет')}</span><div class="swatches">
           ${COLORS.map((c) => `<label class="sw" style="--c:${c}"><input type="radio" name="color" value="${c}" ${c === s.color ? 'checked' : ''}><i></i></label>`).join('')}
         </div></div>
       </div>
-      <button class="btn primary" type="submit">${ic(I.check)} Сохранить</button>
-      ${isNew ? '' : `<button type="button" class="btn danger" data-act="del-shelf" data-id="${s.id}">${ic(I.trash)} Удалить полку</button>`}
+      <button class="btn primary" type="submit">${ic(I.check)} ${t('Сохранить')}</button>
+      ${isNew ? '' : `<button type="button" class="btn danger" data-act="del-shelf" data-id="${s.id}">${ic(I.trash)} ${t('Удалить полку')}</button>`}
     </form>`;
 }
 
@@ -563,36 +581,39 @@ function vPayments() {
   const ps = S.data.items.filter((i) => i.type === 'payment');
   const active = ps.filter((i) => !i.f.done).sort((a, b) => ((a.f.nextDate || '9') < (b.f.nextDate || '9') ? -1 : 1));
   const done = ps.filter((i) => i.f.done);
-  return `${top('Платежи', '', '#/')}
+  return `${top(t('Платежи'), '', '#/')}
     ${summaryCard()}
-    ${active.length ? `<h2 class="sec"><span>Регулярные</span></h2><div class="glass list">${active.map((i) => row(i, true)).join('')}</div>`
-      : '<div class="glass card empty">Платежей пока нет</div>'}
-    ${done.length ? `<h2 class="sec"><span>Разовые, оплачены</span></h2><div class="glass list">${done.map((i) => row(i, true)).join('')}</div>` : ''}`;
+    ${active.length ? `<h2 class="sec"><span>${t('Регулярные')}</span></h2><div class="glass list">${active.map((i) => row(i, true)).join('')}</div>`
+      : `<div class="glass card empty">${t('Платежей пока нет')}</div>`}
+    ${done.length ? `<h2 class="sec"><span>${t('Разовые, оплачены')}</span></h2><div class="glass list">${done.map((i) => row(i, true)).join('')}</div>` : ''}`;
 }
 
 function vSettings() {
   const d = S.data;
-  const lb = d.meta.lastBackup ? fmtDateTime(d.meta.lastBackup) : 'ещё не делался';
-  return `${top('Настройки', '', '#/')}
+  const lb = d.meta.lastBackup ? fmtDateTime(d.meta.lastBackup) : t('ещё не делался');
+  return `${top(t('Настройки'), '', '#/')}
     <div class="glass list">
-      <div class="row static"><span class="ti t-neutral">${ic(I.auto)}</span><span class="rt"><b>Тема</b></span>
+      <div class="row static"><span class="ti t-neutral">${ic(I.auto)}</span><span class="rt"><b>${t('Тема')}</b></span>
         <div class="seg">${THEMES.map(([k, l]) => `<button data-act="theme" data-t="${k}" class="${getTheme() === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       </div>
-      <label class="row static"><span class="ti t-neutral">${ic(I.clock)}</span><span class="rt"><b>Автоблокировка</b><small>При бездействии</small></span>
-        <select id="autolock">${[1, 3, 5, 15, 30].map((m) => `<option value="${m}" ${+d.settings.autoLock === m ? 'selected' : ''}>${m} мин</option>`).join('')}</select>
+      <div class="row static"><span class="ti t-neutral">${ic(I.globe)}</span><span class="rt"><b>${t('Язык')}</b></span>
+        <div class="seg">${LANG_NAMES.map(([k, l]) => `<button data-act="lang" data-l="${k}" lang="${k}" class="${lang() === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+      </div>
+      <label class="row static"><span class="ti t-neutral">${ic(I.clock)}</span><span class="rt"><b>${t('Автоблокировка')}</b><small>${t('При бездействии')}</small></span>
+        <select id="autolock">${[1, 3, 5, 15, 30].map((m) => `<option value="${m}" ${+d.settings.autoLock === m ? 'selected' : ''}>${t('{0} мин', m)}</option>`).join('')}</select>
       </label>
     </div>
-    <h2 class="sec"><span>Резервная копия</span></h2>
+    <h2 class="sec"><span>${t('Резервная копия')}</span></h2>
     <div class="glass list">
-      <button class="row" data-act="export"><span class="ti t-ssh">${ic(I.download)}</span><span class="rt"><b>Сохранить бэкап</b><small>Последний: ${lb}</small></span></button>
-      <button class="row" data-act="import"><span class="ti t-password">${ic(I.upload)}</span><span class="rt"><b>Импорт из файла</b><small>Бэкап заменит данные, файл импорта — добавит</small></span></button>
+      <button class="row" data-act="export"><span class="ti t-ssh">${ic(I.download)}</span><span class="rt"><b>${t('Сохранить бэкап')}</b><small>${t('Последний: {0}', lb)}</small></span></button>
+      <button class="row" data-act="import"><span class="ti t-password">${ic(I.upload)}</span><span class="rt"><b>${t('Импорт из файла')}</b><small>${t('Бэкап заменит данные, файл импорта — добавит')}</small></span></button>
     </div>
-    <h2 class="sec"><span>Безопасность</span></h2>
+    <h2 class="sec"><span>${t('Безопасность')}</span></h2>
     <div class="glass list">
-      <button class="row" data-act="chpw"><span class="ti t-token">${ic(I.lock)}</span><span class="rt"><b>Сменить мастер-пароль</b></span></button>
-      <button class="row danger" data-act="wipe"><span class="ti t-danger">${ic(I.trash)}</span><span class="rt"><b>Стереть всё с устройства</b></span></button>
+      <button class="row" data-act="chpw"><span class="ti t-token">${ic(I.lock)}</span><span class="rt"><b>${t('Сменить мастер-пароль')}</b></span></button>
+      <button class="row danger" data-act="wipe"><span class="ti t-danger">${ic(I.trash)}</span><span class="rt"><b>${t('Стереть всё с устройства')}</b></span></button>
     </div>
-    <p class="foot muted">Данные зашифрованы AES-256-GCM и хранятся только на этом устройстве. Ключ получается из мастер-пароля (PBKDF2-SHA256, 600 000 итераций). Бэкап — это тот же зашифрованный файл: без мастер-пароля его не открыть.<br><br>Связка ${VERSION} · ${nItems(d.items.length)}</p>`;
+    <p class="foot muted">${t('Данные зашифрованы AES-256-GCM и хранятся только на этом устройстве. Ключ получается из мастер-пароля (PBKDF2-SHA256, 600 000 итераций). Бэкап — это тот же зашифрованный файл: без мастер-пароля его не открыть.')}<br><br>${t('Связка')} ${VERSION} · ${nItems(d.items.length)}</p>`;
 }
 
 /* ───────────── render / routing ───────────── */
@@ -613,47 +634,47 @@ function vSide(selShelf, nav) {
   const overdue = urgent.filter((x) => x.d.days < 0).length;
   const badge = urgent.length ? `<b class="badge ${overdue ? '' : 'amber'}">${urgent.length}</b>` : '';
   return `<aside class="side">
-    <div class="brand"><span class="logo-s">${ic(I.key)}</span><b>Связка</b></div>
-    <label class="search glass">${ic(I.search)}<input id="q" type="search" placeholder="Поиск   ${MOD}F" value="${esc(ui.q)}" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <div class="brand"><span class="logo-s">${ic(I.key)}</span><b>${t('Связка')}</b></div>
+    <label class="search glass">${ic(I.search)}<input id="q" type="search" placeholder="${t('Поиск')}   ${MOD}F" value="${esc(ui.q)}" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
     <nav class="snav">
-      <a class="sn ${nav === 'home' ? 'on' : ''}" href="#/">${ic(I.clock)}<span>Обзор</span>${badge}</a>
-      <a class="sn ${nav === 'payments' ? 'on' : ''}" href="#/payments">${ic(I.card)}<span>Платежи</span></a>
+      <a class="sn ${nav === 'home' ? 'on' : ''}" href="#/">${ic(I.clock)}<span>${t('Обзор')}</span>${badge}</a>
+      <a class="sn ${nav === 'payments' ? 'on' : ''}" href="#/payments">${ic(I.card)}<span>${t('Платежи')}</span></a>
     </nav>
-    <div class="slabel"><span>Полки</span><a href="#/shelfedit/new" title="Новая полка">${ic(I.plus)}</a></div>
+    <div class="slabel"><span>${t('Полки')}</span><a href="#/shelfedit/new" title="${t('Новая полка')}">${ic(I.plus)}</a></div>
     <nav class="snav shelves">
       ${shelvesSorted().map((s) => `<a class="sn ${s.id === selShelf ? 'on' : ''}" href="#/shelf/${s.id}"><i class="hdot" style="--c:${esc(s.color)}"></i><span>${esc(s.name)}</span><em>${itemsIn(s.id).length}</em></a>`).join('')
-        || '<a class="sn muted" href="#/shelfedit/new"><span>Создайте первую полку</span></a>'}
+        || `<a class="sn muted" href="#/shelfedit/new"><span>${t('Создайте первую полку')}</span></a>`}
     </nav>
     <div class="sfoot">
-      <button class="icon-btn" data-act="theme-cycle" title="Тема: ${THEMES.find((x) => x[0] === th)[1]}">${ic(I[th === 'auto' ? 'auto' : th === 'light' ? 'sun' : 'moon'])}</button>
-      <a class="icon-btn ${nav === 'settings' ? 'on' : ''}" href="#/settings" title="Настройки">${ic(I.sliders)}</a>
+      <button class="icon-btn" data-act="theme-cycle" title="${t('Тема: {0}', THEMES.find((x) => x[0] === th)[1])}">${ic(I[th === 'auto' ? 'auto' : th === 'light' ? 'sun' : 'moon'])}</button>
+      <a class="icon-btn ${nav === 'settings' ? 'on' : ''}" href="#/settings" title="${t('Настройки')}">${ic(I.sliders)}</a>
       <span class="grow"></span>
-      <button class="icon-btn" data-act="lock" title="Заблокировать (${MOD}L)">${ic(I.lock)}</button>
+      <button class="icon-btn" data-act="lock" title="${t('Заблокировать')} (${MOD}L)">${ic(I.lock)}</button>
     </div>
   </aside>`;
 }
 
 function midShelf(s) {
-  const items = itemsIn(s.id).sort((a, b) => TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type) || a.title.localeCompare(b.title, 'ru'));
+  const items = itemsIn(s.id).sort((a, b) => TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type) || a.title.localeCompare(b.title, locale()));
   return `<header class="mhead">
       <i class="hdot" style="--c:${esc(s.color)}"></i><h2>${esc(s.name)}</h2><span class="cnt">${items.length}</span>
-      <a class="mini" href="#/shelfedit/${s.id}" title="Изменить полку">${ic(I.edit)}</a>
-      <a class="btn-add" href="#/new/${s.id}" title="Новая запись (${MOD}N)">${ic(I.plus)}Добавить</a>
+      <a class="mini" href="#/shelfedit/${s.id}" title="${t('Изменить полку')}">${ic(I.edit)}</a>
+      <a class="btn-add" href="#/new/${s.id}" title="${t('Новая запись')} (${MOD}N)">${ic(I.plus)}${t('Добавить')}</a>
     </header>
     ${items.length ? `<div class="glass list">${items.map((i) => row(i, false, true)).join('')}</div>`
-      : `<div class="glass card empty">Пока пусто.<br>Добавьте пароль, SSH-ключ или оплату.</div>`}`;
+      : `<div class="glass card empty">${t('Пока пусто.')}<br>${t('Добавьте пароль, SSH-ключ или оплату.')}</div>`}`;
 }
 
 function midHome() {
-  return `<header class="mhead"><h2>Обзор</h2><a class="btn-add" href="#/new" title="Новая запись (${MOD}N)">${ic(I.plus)}Добавить</a></header>${homeBody(true)}`;
+  return `<header class="mhead"><h2>${t('Обзор')}</h2><a class="btn-add" href="#/new" title="${t('Новая запись')} (${MOD}N)">${ic(I.plus)}${t('Добавить')}</a></header>${homeBody(true)}`;
 }
 
 function midSearch() {
-  return `<header class="mhead"><h2>Поиск</h2><span class="cnt">«${esc(ui.q.trim())}»</span></header>${searchResults()}`;
+  return `<header class="mhead"><h2>${t('Поиск')}</h2><span class="cnt">${t('«{0}»', esc(ui.q.trim()))}</span></header>${searchResults()}`;
 }
 
 function vDesk(p, a, b) {
-  let mid = '', det = placeholder('Выберите запись'), wide = false, selShelf = null, selItem = null, nav = null;
+  let mid = '', det = placeholder(t('Выберите запись')), wide = false, selShelf = null, selItem = null, nav = null;
   switch (p) {
     case 'shelf': { const s = shelf(a); if (!s) return null; selShelf = s.id; mid = midShelf(s); break; }
     case 'item': case 'edit': {
@@ -748,7 +769,7 @@ addEventListener('keydown', (e) => {
 
 /* ───────────── modal / toast / clipboard ───────────── */
 
-function modal({ title, text = '', fields = [], ok = 'OK', cancel = 'Отмена', alt = null, danger = false, validate = null }) {
+function modal({ title, text = '', fields = [], ok = 'OK', cancel = t('Отмена'), alt = null, danger = false, validate = null }) {
   return new Promise((resolve) => {
     const el = document.createElement('div');
     el.className = 'scrim';
@@ -790,15 +811,15 @@ const confirmBox = (title, text, ok, danger = true) => modal({ title, text, ok, 
 
 let toastT;
 function toast(msg) {
-  const t = $('#toast');
-  t.textContent = msg;
-  t.classList.add('on');
+  const el = $('#toast');
+  el.textContent = msg;
+  el.classList.add('on');
   clearTimeout(toastT);
-  toastT = setTimeout(() => t.classList.remove('on'), 2400);
+  toastT = setTimeout(() => el.classList.remove('on'), 2400);
 }
 
 let clipT;
-async function copyText(v, msg = 'Скопировано') {
+async function copyText(v, msg = t('Скопировано')) {
   try {
     await navigator.clipboard.writeText(v);
   } catch {
@@ -808,7 +829,7 @@ async function copyText(v, msg = 'Скопировано') {
     try { document.execCommand('copy'); } catch {}
     ta.remove();
   }
-  toast(`${msg} · очистка через 30 с`);
+  toast(t('{0} · очистка через 30 с', msg));
   clearTimeout(clipT);
   clipT = setTimeout(() => navigator.clipboard?.writeText('').catch(() => {}), 30000);
 }
@@ -833,6 +854,21 @@ function pickFile() {
 
 /* ───────────── actions ───────────── */
 
+const LANG_NAMES = [['ru', 'Русский'], ['en', 'English']];
+
+// Сменить язык: с агентом — в его настройки (общие с svyazka config lang), без агента — в этом браузере; затем перезагрузка
+async function switchLang(l) {
+  if (l === lang() || !LANG_NAMES.some(([k]) => k === l)) return;
+  if (store.ready) {
+    if (!(await store.setLang(l))) return toast(t('Не удалось сменить язык'));
+  } else {
+    try { localStorage.setItem(LANG_KEY, l); } catch {}
+  }
+  const u = new URL(location.href);
+  u.searchParams.set('lang', l);
+  location.replace(u.href);
+}
+
 function lock() {
   document.querySelectorAll('.scrim').forEach((e) => e.remove());
   ui.bioTried = true; // после блокировки не спрашиваем отпечаток сам — только по кнопке
@@ -852,15 +888,15 @@ async function tryBio() {
   const hint = $('#lock-hint');
   const btn = $('[data-act="bio"]');
   if (btn) btn.disabled = true;
-  if (hint) hint.textContent = `Ждём ${BIO}…`;
+  if (hint) hint.textContent = t('Ждём {0}…', BIO);
   const r = await store.unlock().catch(() => ({ ok: false }));
   if (r.ok) {
     try { await openRaw(r); normalize(S.data); lastAct = Date.now(); render(); return; } catch {}
   }
   if (btn) btn.disabled = false;
   if (hint) hint.textContent = r.code === 'NEED_PASSWORD'
-    ? `Первый раз — мастер-пароль. Дальше Связка будет открываться по ${BIO}.`
-    : r.code === 'DENIED' ? `${BIO} не подтверждён — попробуйте ещё раз или введите пароль` : 'Введите мастер-пароль';
+    ? t('Первый раз — мастер-пароль. Дальше Связка будет открываться по {0}.', BIO)
+    : r.code === 'DENIED' ? t('{0} не подтверждён — попробуйте ещё раз или введите пароль', BIO) : t('Введите мастер-пароль');
   $('#f-lock input')?.focus();
 }
 
@@ -874,13 +910,13 @@ async function onLockSubmit(form) {
   err.hidden = true;
   try {
     if (!stored) {
-      if (pw.length < 8) throw new Error('Минимум 8 символов');
-      if (pw !== fd.get('pw2')) throw new Error('Пароли не совпадают');
+      if (pw.length < 8) throw new Error(t('Минимум 8 символов'));
+      if (pw !== fd.get('pw2')) throw new Error(t('Пароли не совпадают'));
     }
-    btn.disabled = true; btn.textContent = 'Открываю…';
+    btn.disabled = true; btn.textContent = t('Открываю…');
     if (stored) {
       const r = await store.unlock(pw);
-      if (!r.ok) throw new Error(r.code === 'BAD_PASSWORD' ? 'Неверный пароль' : (r.error || 'Не удалось открыть'));
+      if (!r.ok) throw new Error(r.code === 'BAD_PASSWORD' ? t('Неверный пароль') : (r.error || t('Не удалось открыть')));
       await openRaw(r);
     } else {
       const salt = rand(16);
@@ -903,7 +939,7 @@ async function saveItem(form) {
   const isNew = !!form.dataset.new;
   const type = form.dataset.type;
   const title = String(fd.get('title') || '').trim();
-  if (!title) return toast('Укажите название');
+  if (!title) return toast(t('Укажите название'));
 
   let it = isNew ? { id: form.dataset.id, type, created: Date.now(), f: {} } : item(form.dataset.id);
   if (!it) return;
@@ -924,7 +960,7 @@ async function saveItem(form) {
 
   let shelfId = fd.get('shelfId');
   if (shelfId === '__default' || shelfId === '__new' || !shelf(shelfId)) {
-    const s = S.data.shelves[0] || { id: uid(), name: 'Разное', color: COLORS[0], created: Date.now() };
+    const s = S.data.shelves[0] || { id: uid(), name: t('Разное'), color: COLORS[0], created: Date.now() };
     if (!shelf(s.id)) S.data.shelves.push(s);
     shelfId = s.id;
   }
@@ -935,14 +971,14 @@ async function saveItem(form) {
   it.updated = Date.now();
   if (isNew) S.data.items.push(it);
   await save();
-  toast('Сохранено');
+  toast(t('Сохранено'));
   location.replace('#/item/' + it.id);
 }
 
 async function saveShelf(form) {
   const fd = new FormData(form);
   const name = String(fd.get('name') || '').trim();
-  if (!name) return toast('Укажите название');
+  if (!name) return toast(t('Укажите название'));
   const color = fd.get('color') || COLORS[0];
   const id = form.dataset.id;
   if (form.dataset.new) S.data.shelves.push({ id, name, color, created: Date.now(), updated: Date.now() });
@@ -952,7 +988,7 @@ async function saveShelf(form) {
 }
 
 async function newShelfInline(sel) {
-  const r = await modal({ title: 'Новая полка', fields: [{ name: 'name', ph: 'Название', cap: 1 }], ok: 'Создать' });
+  const r = await modal({ title: t('Новая полка'), fields: [{ name: 'name', ph: t('Название'), cap: 1 }], ok: t('Создать') });
   const name = r?.name?.trim();
   if (!name) { sel.selectedIndex = 0; return; }
   const s = { id: uid(), name, color: COLORS[S.data.shelves.length % COLORS.length], created: Date.now() };
@@ -974,7 +1010,7 @@ async function exportBackup() {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   S.data.meta.lastBackup = Date.now();
   await save();
-  toast('Бэкап сохранён');
+  toast(t('Бэкап сохранён'));
   render();
 }
 
@@ -984,26 +1020,26 @@ async function importBackup() {
   let blob;
   try {
     blob = JSON.parse(await file.text());
-  } catch { return toast('Не удалось прочитать JSON'); }
+  } catch { return toast(t('Не удалось прочитать JSON')); }
   if (isPlainImport(blob)) return importPlain(blob);
-  if (!isVaultBlob(blob)) return toast('Это не файл Связки');
+  if (!isVaultBlob(blob)) return toast(t('Это не файл Связки'));
   let mode = 'replace';
   if (S) {
     const m = await modal({
-      title: 'Загрузить бэкап', text: 'Объединить — добавит новое и обновит изменённое (так переносят данные между компьютерами). Заменить — сотрёт текущие данные.',
-      ok: 'Объединить', alt: 'Заменить всё',
+      title: t('Загрузить бэкап'), text: t('Объединить — добавит новое и обновит изменённое (так переносят данные между компьютерами). Заменить — сотрёт текущие данные.'),
+      ok: t('Объединить'), alt: t('Заменить всё'),
     });
     if (!m) return;
     mode = m._alt ? 'replace' : 'merge';
-    if (mode === 'replace' && !(await confirmBox('Заменить данные?', 'Текущее хранилище будет полностью заменено содержимым бэкапа.', 'Заменить'))) return;
+    if (mode === 'replace' && !(await confirmBox(t('Заменить данные?'), t('Текущее хранилище будет полностью заменено содержимым бэкапа.'), t('Заменить')))) return;
   } else if (hasVault()) {
-    if (!(await confirmBox('Заменить данные?', 'Текущее хранилище на этом устройстве будет полностью заменено содержимым бэкапа.', 'Заменить'))) return;
+    if (!(await confirmBox(t('Заменить данные?'), t('Текущее хранилище на этом устройстве будет полностью заменено содержимым бэкапа.'), t('Заменить')))) return;
   }
   let opened = null;
   const r = await modal({
-    title: 'Пароль бэкапа', text: 'Мастер-пароль, с которым был сделан этот файл.',
-    fields: [{ name: 'pw', type: 'password', ph: 'Мастер-пароль' }], ok: mode === 'merge' ? 'Объединить' : 'Восстановить',
-    validate: async (v) => { try { opened = await openVault(blob, v.pw); } catch { return 'Неверный пароль'; } },
+    title: t('Пароль бэкапа'), text: t('Мастер-пароль, с которым был сделан этот файл.'),
+    fields: [{ name: 'pw', type: 'password', ph: t('Мастер-пароль') }], ok: mode === 'merge' ? t('Объединить') : t('Восстановить'),
+    validate: async (v) => { try { opened = await openVault(blob, v.pw); } catch { return t('Неверный пароль'); } },
   });
   if (!r || !opened) return;
   if (mode === 'merge') {
@@ -1011,7 +1047,7 @@ async function importBackup() {
     S.data = data;
     await save();
     render();
-    return toast(`Объединено: новых ${stats.added}, обновлено ${stats.updated}, удалено ${stats.removed}`);
+    return toast(t('Объединено: новых {0}, обновлено {1}, удалено {2}', stats.added, stats.updated, stats.removed));
   }
   S = opened;
   normalize(S.data);
@@ -1019,20 +1055,20 @@ async function importBackup() {
   lastAct = Date.now();
   location.hash = '#/';
   render();
-  toast(`Восстановлено: ${nItems(S.data.items.length)}`);
+  toast(t('Восстановлено: {0}', nItems(S.data.items.length)));
 }
 
 async function importPlain(src) {
-  if (!S) return toast('Сначала создайте хранилище, затем импорт в Настройках');
+  if (!S) return toast(t('Сначала создайте хранилище, затем импорт в Настройках'));
   const { shelves, items, newShelves, skipped } = planPlainImport(S.data, src);
-  if (!items.length) return toast(skipped ? `Новых записей нет, пропущено: ${skipped}` : 'В файле нет записей');
+  if (!items.length) return toast(skipped ? t('Новых записей нет, пропущено: {0}', skipped) : t('В файле нет записей'));
 
-  const byType = TYPE_ORDER.map((t) => [t, items.filter((i) => i.type === t).length]).filter(([, n]) => n)
-    .map(([t, n]) => `${TYPES[t].label.toLowerCase()} — ${n}`).join(', ');
+  const byType = TYPE_ORDER.map((ty) => [ty, items.filter((i) => i.type === ty).length]).filter(([, n]) => n)
+    .map(([ty, n]) => `${TYPES[ty].label.toLowerCase()} — ${n}`).join(', ');
   const ok = await modal({
-    title: `Импорт: ${nItems(items.length)}`,
-    text: `${byType}.${newShelves ? ` Новых полок: ${newShelves}.` : ''}${skipped ? ` Пропущено (дубли или пустые): ${skipped}.` : ''}`,
-    ok: 'Добавить',
+    title: t('Импорт: {0}', nItems(items.length)),
+    text: [byType + '.', newShelves ? t('Новых полок: {0}.', newShelves) : '', skipped ? t('Пропущено (дубли или пустые): {0}.', skipped) : ''].filter(Boolean).join(' '),
+    ok: t('Добавить'),
   });
   if (!ok) return;
   S.data.shelves = shelves;
@@ -1041,9 +1077,9 @@ async function importPlain(src) {
   location.hash = '#/';
   render();
   await modal({
-    title: 'Готово',
-    text: 'Файл импорта не зашифрован. Удалите его (и из Загрузок, и из мессенджеров) и сохраните свежий бэкап.',
-    ok: 'Понятно', cancel: null,
+    title: t('Готово'),
+    text: t('Файл импорта не зашифрован. Удалите его (и из Загрузок, и из мессенджеров) и сохраните свежий бэкап.'),
+    ok: t('Понятно'), cancel: null,
   });
 }
 
@@ -1054,14 +1090,15 @@ const A = {
   export: exportBackup,
   copy: (el) => { const v = item(el.dataset.id)?.f[el.dataset.k]; if (v) copyText(v); },
   'copy-text': (el) => copyText(el.dataset.text),
-  'copy-access': (el) => { const it = item(el.dataset.id); if (it) copyText(accessText(it), 'Доступ скопирован'); },
+  'copy-access': (el) => { const it = item(el.dataset.id); if (it) copyText(accessText(it), t('Доступ скопирован')); },
   theme: (el) => { setTheme(el.dataset.t); render(); },
+  lang: (el) => switchLang(el.dataset.l),
   'theme-cycle': () => {
     const order = THEMES.map((x) => x[0]);
     const next = order[(order.indexOf(getTheme()) + 1) % order.length];
     setTheme(next);
     render();
-    toast('Тема: ' + THEMES.find((x) => x[0] === next)[1]);
+    toast(t('Тема: {0}', THEMES.find((x) => x[0] === next)[1]));
   },
   reveal: (el) => {
     const it = item(el.dataset.id);
@@ -1085,7 +1122,7 @@ const A = {
     inp.value = genPassword();
     inp.type = 'text';
     el.closest('.in').querySelector('[data-act="toggle-vis"]').innerHTML = ic(I.eyeOff);
-    toast('Сгенерирован пароль из 20 символов');
+    toast(t('Сгенерирован пароль из 20 символов'));
   },
   paid: async (el) => {
     const it = item(el.dataset.id);
@@ -1093,11 +1130,11 @@ const A = {
     markPaid(it);
     await save();
     render();
-    toast(+f.period ? `Следующий платёж — ${fmtDate(f.nextDate)}` : 'Отмечено как оплачено');
+    toast(+f.period ? t('Следующий платёж — {0}', fmtDate(f.nextDate)) : t('Отмечено как оплачено'));
   },
   'del-item': async (el) => {
     const it = item(el.dataset.id);
-    if (!(await confirmBox('Удалить запись?', `«${it.title}» будет удалена без возможности восстановления.`, 'Удалить'))) return;
+    if (!(await confirmBox(t('Удалить запись?'), t('«{0}» будет удалена без возможности восстановления.', it.title), t('Удалить')))) return;
     S.data.items = S.data.items.filter((i) => i.id !== it.id);
     tombstone(S.data, 'item', it.id);
     await save();
@@ -1106,7 +1143,7 @@ const A = {
   'del-shelf': async (el) => {
     const s = shelf(el.dataset.id);
     const n = itemsIn(s.id).length;
-    if (!(await confirmBox('Удалить полку?', n ? `Вместе с полкой «${s.name}» удалятся ${nItems(n)}.` : `Полка «${s.name}» пустая.`, 'Удалить'))) return;
+    if (!(await confirmBox(t('Удалить полку?'), n ? t('Вместе с полкой «{0}» удалятся {1}.', s.name, nItems(n)) : t('Полка «{0}» пустая.', s.name), t('Удалить')))) return;
     S.data.shelves = S.data.shelves.filter((x) => x.id !== s.id);
     for (const i of itemsIn(s.id)) tombstone(S.data, 'item', i.id);
     tombstone(S.data, 'shelf', s.id);
@@ -1117,11 +1154,11 @@ const A = {
   chpw: async () => {
     let next = null;
     const r = await modal({
-      title: 'Новый мастер-пароль', text: 'Старые бэкапы останутся со старым паролем.',
-      fields: [{ name: 'pw', type: 'password', ph: 'Новый пароль' }, { name: 'pw2', type: 'password', ph: 'Повторите' }], ok: 'Сменить',
+      title: t('Новый мастер-пароль'), text: t('Старые бэкапы останутся со старым паролем.'),
+      fields: [{ name: 'pw', type: 'password', ph: t('Новый пароль') }, { name: 'pw2', type: 'password', ph: t('Повторите') }], ok: t('Сменить'),
       validate: async (v) => {
-        if (v.pw.length < 8) return 'Минимум 8 символов';
-        if (v.pw !== v.pw2) return 'Пароли не совпадают';
+        if (v.pw.length < 8) return t('Минимум 8 символов');
+        if (v.pw !== v.pw2) return t('Пароли не совпадают');
         const salt = rand(16);
         next = { key: await deriveKey(v.pw, salt, ITER), salt, iter: ITER };
       },
@@ -1129,13 +1166,14 @@ const A = {
     if (!r || !next) return;
     Object.assign(S, next);
     await save();
-    toast('Мастер-пароль изменён');
+    toast(t('Мастер-пароль изменён'));
   },
   wipe: async () => {
+    const word = t('УДАЛИТЬ');
     const r = await modal({
-      title: 'Стереть всё?', text: 'Все записи будут удалены с устройства. Если нет бэкапа — навсегда. Введите УДАЛИТЬ для подтверждения.',
-      fields: [{ name: 'c', ph: 'УДАЛИТЬ' }], ok: 'Стереть', danger: true,
-      validate: async (v) => (v.c.trim().toUpperCase() === 'УДАЛИТЬ' ? null : 'Введите УДАЛИТЬ'),
+      title: t('Стереть всё?'), text: t('Все записи будут удалены с устройства. Если нет бэкапа — навсегда. Введите {0} для подтверждения.', word),
+      fields: [{ name: 'c', ph: word }], ok: t('Стереть'), danger: true,
+      validate: async (v) => (v.c.trim().toUpperCase() === word ? null : t('Введите {0}', word)),
     });
     if (!r) return;
     await store.remove();
@@ -1166,7 +1204,7 @@ app.addEventListener('input', (e) => {
 });
 app.addEventListener('change', (e) => {
   if (e.target.name === 'shelfId' && e.target.value === '__new') newShelfInline(e.target);
-  if (e.target.id === 'autolock') { S.data.settings.autoLock = +e.target.value; save(); toast('Сохранено'); }
+  if (e.target.id === 'autolock') { S.data.settings.autoLock = +e.target.value; save(); toast(t('Сохранено')); }
 });
 
 /* ───────────── auto-lock & privacy ───────────── */
@@ -1181,15 +1219,15 @@ document.addEventListener('visibilitychange', () => {
   document.body.classList.toggle('veil', document.hidden);
   if (document.hidden) hiddenAt = Date.now();
   else if (S && hiddenAt && Date.now() - hiddenAt > Math.min((S.data.settings.autoLock || 5) * 60000, 60000)) lock();
-  else if (S) pullExternal().then(async (changed) => { if (changed) { await save(); render(); toast('Обновлено'); } });
+  else if (S) pullExternal().then(async (changed) => { if (changed) { await save(); render(); toast(t('Обновлено')); } });
 });
 
 /* ───────────── boot ───────────── */
 
 if (!store.ready) {
-  app.innerHTML = `<section class="lock"><div class="glass card stack"><b>Откройте Связку через приложение</b><p class="muted">Эта страница работает только из приложения «Связка» или команды <code>svyazka ui</code>.</p></div></section>`;
+  app.innerHTML = `<section class="lock"><div class="glass card stack"><b>${t('Откройте Связку через приложение')}</b><p class="muted">${t('Эта страница работает только из приложения «Связка» или команды <code>svyazka ui</code>.')}</p></div></section>`;
 } else {
   store.init().then(render, (e) => {
-    app.innerHTML = `<section class="lock"><div class="glass card stack"><b>Связка не отвечает</b><p class="muted">${esc(e.message)}. Обновите окно (${MOD}R) или запустите: svyazka ui</p></div></section>`;
+    app.innerHTML = `<section class="lock"><div class="glass card stack"><b>${t('Связка не отвечает')}</b><p class="muted">${t('{0}. Обновите окно ({1}R) или запустите: svyazka ui', esc(e.message), MOD)}</p></div></section>`;
   });
 }

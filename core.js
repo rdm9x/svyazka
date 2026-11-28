@@ -1,6 +1,12 @@
 // Ядро Связки: формат хранилища, шифрование и слияние.
 // Один и тот же файл работает в браузере (телефон, веб-интерфейс) и в Node 20+ (svyazka на Mac).
 
+import { makeT } from './i18n.js';
+import EN from './lang/en-cli.js';
+
+// Видимые человеку строки ядра (ошибки, названия по умолчанию). Язык общий с окном и svyazka.
+const t = makeT({ en: EN });
+
 export const ITER = 600000;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -67,9 +73,9 @@ export async function decryptWith(blob, key) {
 }
 
 function checkBlob(b) {
-  if (!isVaultBlob(b)) throw new Error('Это не файл Связки');
-  if (b.v > FORMAT) throw new Error('Файл из более новой версии Связки — обновите программу');
-  if (b.kdf !== 'PBKDF2-SHA256' || !(b.iter >= MIN_ITER)) throw new Error('Неподдерживаемые параметры шифрования');
+  if (!isVaultBlob(b)) throw new Error(t('Это не файл Связки'));
+  if (b.v > FORMAT) throw new Error(t('Файл из более новой версии Связки — обновите программу'));
+  if (b.kdf !== 'PBKDF2-SHA256' || !(b.iter >= MIN_ITER)) throw new Error(t('Неподдерживаемые параметры шифрования'));
 }
 
 export const isVaultBlob = (b) => !!(b && b.app === 'svyazka' && b.ct && b.salt && b.iv);
@@ -102,9 +108,9 @@ export function mergeData(local, incoming) {
   const stats = { added: 0, updated: 0, removed: 0 };
 
   const tomb = new Map();
-  for (const t of [...local.deleted, ...incoming.deleted]) {
-    const k = t.kind + ':' + t.id;
-    if (!tomb.has(k) || tomb.get(k).at < t.at) tomb.set(k, t);
+  for (const x of [...local.deleted, ...incoming.deleted]) {
+    const k = x.kind + ':' + x.id;
+    if (!tomb.has(k) || tomb.get(k).at < x.at) tomb.set(k, x);
   }
 
   // полки
@@ -127,14 +133,15 @@ export function mergeData(local, incoming) {
     else if (stamp(i) > stamp(mine)) { items.set(i.id, i); stats.updated++; }
   }
 
-  for (const [id, x] of shelves) { const t = tomb.get('shelf:' + id); if (t && t.at >= stamp(x)) shelves.delete(id); }
-  for (const [id, x] of items) { const t = tomb.get('item:' + id); if (t && t.at >= stamp(x)) { items.delete(id); stats.removed++; } }
+  for (const [id, x] of shelves) { const d = tomb.get('shelf:' + id); if (d && d.at >= stamp(x)) shelves.delete(id); }
+  for (const [id, x] of items) { const d = tomb.get('item:' + id); if (d && d.at >= stamp(x)) { items.delete(id); stats.removed++; } }
 
-  // записи без полки — на «Разное»
+  // записи без полки — на «Разное» (имя полки — данные; новая полка получает имя на языке интерфейса)
   let orphanShelf = null;
   for (const i of items.values()) {
     if (shelves.has(i.shelfId)) continue;
-    orphanShelf ||= [...shelves.values()].find((s) => s.name === 'Разное') || { id: uid(), name: 'Разное', color: '#a3aec2', created: Date.now() };
+    orphanShelf ||= [...shelves.values()].find((s) => s.name === 'Разное' || s.name === t('Разное'))
+      || { id: uid(), name: t('Разное'), color: '#a3aec2', created: Date.now() };
     shelves.set(orphanShelf.id, orphanShelf);
     i.shelfId = orphanShelf.id;
   }
@@ -189,7 +196,8 @@ export function markPaid(it) {
   it.updated = Date.now();
 }
 
-const LABELS = { password: 'Пароль', ssh: 'SSH', token: 'Токен', payment: 'Оплата', note: 'Заметка' };
+// Название записи по умолчанию — функцией: язык выбирается уже после загрузки модуля
+const label = (type) => ({ password: t('Пароль'), ssh: 'SSH', token: t('Токен'), payment: t('Оплата'), note: t('Заметка') })[type];
 
 // Запись из открытого JSON импорта (формат IMPORT.md). null — если пустая или неизвестного типа.
 export function itemFromImport(raw, shelfId, defaultCurrency = 'RUB') {
@@ -219,7 +227,7 @@ export function itemFromImport(raw, shelfId, defaultCurrency = 'RUB') {
   const title = s(raw.title)
     || (type === 'ssh' && f.host ? `${f.user || 'root'}@${f.host}` : '')
     || (type === 'password' && f.url ? f.url.replace(/^https?:\/\//, '').split('/')[0] : '')
-    || LABELS[type];
+    || label(type);
   const now = Date.now();
   return { id: uid(), shelfId, type, title, f, created: now, updated: now };
 }
@@ -230,7 +238,7 @@ export function planPlainImport(data, src) {
   const items = [];
   let newShelves = 0, skipped = 0;
   for (const sh of Array.isArray(src.shelves) ? src.shelves : []) {
-    const name = String(sh?.name ?? '').trim() || 'Разное';
+    const name = String(sh?.name ?? '').trim() || t('Разное');
     let target = shelves.find((x) => x.name.toLowerCase() === name.toLowerCase());
     if (!target) {
       target = { id: uid(), name, color: COLORS.includes(sh.color) ? sh.color : COLORS[shelves.length % COLORS.length], created: Date.now(), updated: Date.now() };

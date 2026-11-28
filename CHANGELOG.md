@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.6.0 — 2026-11-28
+
+- **English interface**: the app window, the `svyazka` command and its help, system dialogs, the Mac app menu, the
+  installers and the rule written to `CLAUDE.md` / `AGENTS.md`. The language follows the system; switch it with
+  `svyazka config lang en|ru|auto` or in the app (Settings → Language). Updating an existing install keeps Russian.
+- README: “How the AI doesn't see your keys” — a plain answer to the most common question.
+- On macOS the app is named “Svyazka” in Finder and Spotlight on an English system.
+- Settings rows with switches are aligned to the left like the others.
+
 ## 1.5.0 — 2026-11-28
 
 - **Install without preparation**: one line (`curl … | sh` on macOS / Linux, two PowerShell lines on Windows) downloads
@@ -54,7 +63,6 @@ First public release.
 
 ## Planned
 
-- English interface.
 - MCP server (`svyazka mcp`) for Cursor, Gemini CLI, Claude Desktop and other agents.
 - Import from Bitwarden, 1Password, KeePassXC, browser exports; export back.
 - TOTP (2FA) codes; macOS notifications for upcoming payments; Homebrew tap; signed and notarized builds.

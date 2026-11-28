@@ -6,11 +6,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { LANGS, langFromTag } from '../i18n.js';
+import { systemLang } from './platform.mjs';
 
 const HOME = os.homedir();
+// язык — как у svyazka: config lang → SVYAZKA_LANG → язык системы
+const LANG = (() => {
+  let c;
+  try { c = JSON.parse(fs.readFileSync(path.join(process.env.SVYAZKA_HOME || path.join(HOME, '.svyazka'), 'config.json'), 'utf8')).lang; } catch {}
+  const e = process.env.SVYAZKA_LANG;
+  return LANGS.includes(c) ? c : LANGS.includes(e) ? e : langFromTag(e || systemLang());
+})();
+const en = LANG === 'en';
 const BEGIN = '<!-- svyazka:begin -->';
 const END = '<!-- svyazka:end -->';
-const BLOCK = `${BEGIN}
+const BLOCK_RU = `${BEGIN}
 ## Доступы и секреты — в Связке
 
 Пароли, SSH-ключи, токены, .env и оплаты серверов/доменов/подписок хранятся в «Связке» (команда \`svyazka\`, навык \`svyazka\`).
@@ -20,6 +30,18 @@ const BLOCK = `${BEGIN}
   Не оставляй секреты в файлах проекта, заметках, коммитах и в чате.
 - Новый сервер, домен или подписка с ценой и датой — добавь оплату (\`svyazka add payment\`).
 ${END}`;
+
+const BLOCK_EN = `${BEGIN}
+## Credentials and secrets live in Svyazka
+
+Passwords, SSH keys, tokens, .env files and payments for servers/domains/subscriptions are kept in Svyazka (the \`svyazka\` command, the \`svyazka\` skill).
+- Need access — take it from Svyazka via the svyazka skill (\`svyazka run\`, \`svyazka ssh\`). Never print values or put them in the chat.
+- **A new secret appeared** (you generated a password or key, created a token or user, received credentials from a service or from me) —
+  **save it to Svyazka right away** (\`svyazka add\`, the secret via \`gen\` / \`@file\` / \`ask\`) and say which shelf you put it on.
+  Don't leave secrets in project files, notes, commits or the chat.
+- A new server, domain or subscription with a price and date — add a payment (\`svyazka add payment\`).
+${END}`;
+const BLOCK = en ? BLOCK_EN : BLOCK_RU;
 
 const targets = [
   { file: path.join(HOME, '.claude', 'CLAUDE.md'), name: 'Claude Code', need: path.join(HOME, '.claude') },
@@ -34,12 +56,14 @@ const strip = (text) => {
 
 const mode = process.argv[2] || 'install';
 for (const t of targets) {
-  if (!fs.existsSync(t.need)) { console.log(`· ${t.name}: не установлен — пропускаю`); continue; }
+  if (!fs.existsSync(t.need)) { console.log(en ? `· ${t.name}: not installed — skipping` : `· ${t.name}: не установлен — пропускаю`); continue; }
   const old = fs.existsSync(t.file) ? fs.readFileSync(t.file, 'utf8') : '';
   const base = strip(old).replace(/\s+$/, '');
   const next = mode === 'remove' ? (base ? base + '\n' : '') : (base ? base + '\n\n' : '') + BLOCK + '\n';
-  if (next === old) { console.log(`· ${t.name}: без изменений (${t.file})`); continue; }
+  if (next === old) { console.log(en ? `· ${t.name}: unchanged (${t.file})` : `· ${t.name}: без изменений (${t.file})`); continue; }
   if (old) fs.copyFileSync(t.file, t.file + '.bak-svyazka');
   fs.writeFileSync(t.file, next);
-  console.log(`✓ ${t.name}: ${mode === 'remove' ? 'правило убрано из' : 'правило о Связке в'} ${t.file}${old ? ' (копия: .bak-svyazka)' : ''}`);
+  console.log(en
+    ? `✓ ${t.name}: ${mode === 'remove' ? 'rule removed from' : 'Svyazka rule in'} ${t.file}${old ? ' (backup: .bak-svyazka)' : ''}`
+    : `✓ ${t.name}: ${mode === 'remove' ? 'правило убрано из' : 'правило о Связке в'} ${t.file}${old ? ' (копия: .bak-svyazka)' : ''}`);
 }

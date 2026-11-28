@@ -95,6 +95,7 @@ Open **Svyazka** from Spotlight (Mac) or the Start menu (Windows), or run `svyaz
 | `svyazka sync`, `config sync-dir <folder>` | encrypted backup and merge between your computers |
 | `svyazka import <file>` | a Svyazka backup (merge) or plain JSON in the [import format](IMPORT.md) |
 | `svyazka log`, `status`, `lock` | audit log, state, lock now |
+| `svyazka config lang en\|ru\|auto` | interface language (auto — by the system) |
 
 Item types: `password`, `ssh`, `token` (a value or a whole `.env`), `payment`, `note`. `svyazka help` for details.
 
@@ -138,7 +139,7 @@ Read [SECURITY.md](SECURITY.md) for the full threat model. In short:
 
 ## Status
 
-macOS, Windows and Linux. The interface is in Russian (English is next); an MCP server for other agents is planned —
+macOS, Windows and Linux. English and Russian interface (by your system language; `svyazka config lang en|ru` or Settings → Language); an MCP server for other agents is planned —
 see the [changelog](CHANGELOG.md). Windows dialogs and Windows Hello are tested by CI only up to the point where a
 person has to click — feedback from Windows users is very welcome. Contributions welcome: [CONTRIBUTING.md](CONTRIBUTING.md).
 
