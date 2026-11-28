@@ -103,6 +103,28 @@ Item types: `password`, `ssh`, `token` (a value or a whole `.env`), `payment`, `
 Codex runs commands in a sandbox that blocks the Svyazka agent socket. The skill tells Codex to ask you to run
 `svyazka` outside the sandbox — approve it (you can allow it permanently).
 
+## How the AI doesn't see your keys
+
+A common question: “if Claude uses my keys, doesn't it see them?” Not when it works through `svyazka`:
+
+1. **The agent works with names.** `svyazka ls`, `find`, `show` list shelves, items, hosts and logins; secrets show up
+   only as a marker that they exist (`🔒password`).
+2. **Secrets go straight into the command.** `svyazka run "Project/.env prod" -- docker compose up -d` — the Svyazka
+   agent starts the command itself and puts the values into its environment. They never appear in the chat, in
+   arguments or on disk. `svyazka ssh` hands the key to `ssh-agent` for 15 minutes, also bypassing the disk.
+3. **Output is scrubbed.** If the command prints a secret anyway (say, `env` or an error containing a token),
+   Svyazka replaces it with `•••` before the agent sees the text.
+4. **New keys stay hidden too.** Passwords are generated inside Svyazka (`--password gen`), values come from a file
+   (`@path`) or another command's output (`-`), and if only you have the key, the agent asks you to paste it into a
+   system dialog (`ask`). Passing a secret as a plain argument is refused.
+5. **Only a person can reveal a value.** `svyazka get` / `copy` need your Touch ID or Windows Hello, and every access
+   is logged (`svyazka log`) with who did it — you, Claude or Codex.
+
+**Where the line is.** This protects against accidental leaks — into chat history, logs, commits, project files. It
+does not stop an agent that *deliberately* wants to steal a key: a program given a secret via `run` can encode it
+(`base64`) before printing or send it over the network. So keep an eye on which commands the agent runs with
+secrets — they are all in the audit log. Details in [SECURITY.md](SECURITY.md).
+
 ## Security
 
 Read [SECURITY.md](SECURITY.md) for the full threat model. In short:
