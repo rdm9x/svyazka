@@ -42,33 +42,39 @@ Every access is logged with who did it — you, Claude or Codex.
 
 ## Install
 
-Requirements: Node.js 20+ and
-- **macOS** 13+ with Xcode Command Line Tools (`xcode-select --install`),
-- **Windows** 10/11 (OpenSSH client for `svyazka ssh`; Windows Hello recommended),
-- **Linux** — terminal prompts, or `zenity` for dialogs; `wl-copy`/`xclip` for the clipboard.
+Nothing to install first: macOS 13+, Windows 10/11 or Linux (x64 / arm64).
+If Node.js 20+ is missing, the installer downloads it from nodejs.org (checksum-verified) into `~/.svyazka/node` —
+a private copy for Svyazka only. On a Mac the Touch ID helper and the app come prebuilt in the release, so Xcode and
+its Command Line Tools are not needed.
 
-**Let your agent do it.** Download the latest [release](https://github.com/rdm9x/svyazka/releases), unzip, open Claude Code (or Codex) in the folder and say:
+**macOS / Linux** — one line in Terminal:
+
+```bash
+curl -fsSL https://github.com/rdm9x/svyazka/releases/latest/download/install.sh | sh
+```
+
+**Windows** — PowerShell:
+
+```powershell
+irm https://github.com/rdm9x/svyazka/releases/latest/download/install.ps1 -OutFile $env:TEMP\svyazka-install.ps1
+powershell -ExecutionPolicy Bypass -File $env:TEMP\svyazka-install.ps1
+```
+
+Then create the vault: `svyazka init` (a dialog asks for the master password). Running the installer again updates
+Svyazka; the vault is never touched.
+
+**Or let your agent do it.** Download the latest [release](https://github.com/rdm9x/svyazka/releases), unzip, open Claude Code (or Codex) in the folder and say:
 
 > Install Svyazka following AGENT_INSTALL.md
 
-It checks requirements, installs everything, creates your vault, connects Codex if present and offers to move your
+It installs everything, creates your vault, connects Codex if present and offers to move your
 existing keys from `~/.ssh` and `.env` files — without printing their values.
 
-**Or by hand:**
+From a git clone: `sh install.sh` (macOS / Linux) or `powershell -ExecutionPolicy Bypass -File install.ps1` (Windows).
+A clone has no prebuilt Mac programs, so there they are compiled — that needs Command Line Tools (`xcode-select --install`).
 
-```bash
-git clone https://github.com/rdm9x/svyazka && cd svyazka
-sh install.sh        # macOS / Linux: `svyazka` in ~/.local/bin, app, skills for Claude Code and Codex
-svyazka init         # create the vault — a dialog asks for the master password
-```
-
-Windows (PowerShell):
-
-```powershell
-git clone https://github.com/rdm9x/svyazka; cd svyazka
-powershell -ExecutionPolicy Bypass -File install.ps1   # `svyazka`, Start-menu shortcut, skills
-svyazka init
-```
+Optional extras: OpenSSH client for `svyazka ssh` on Windows (Windows Hello recommended); on Linux `zenity` for dialogs
+and `wl-copy`/`xclip` for the clipboard.
 
 The installer adds a short block to `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md` between
 `<!-- svyazka:begin/end -->` markers (the original file is backed up as `.bak-svyazka`).
@@ -117,11 +123,11 @@ person has to click — feedback from Windows users is very welcome. Contributio
 ## Uninstall
 
 ```bash
-node ~/.svyazka/app/cli/agent-rules.mjs remove
+$(command -v node || echo ~/.svyazka/node/bin/node) ~/.svyazka/app/cli/agent-rules.mjs remove
 rm -f ~/.local/bin/svyazka ~/.claude/skills/svyazka ~/.codex/skills/svyazka
-rm -rf ~/Applications/Связка.app ~/.svyazka/app
+rm -rf ~/Applications/Связка.app ~/.svyazka/app ~/.svyazka/node
 ```
-Windows: `node $HOME\.svyazka\app\cli\agent-rules.mjs remove`, then delete `~\.svyazka\app`, `~\.svyazka\bin`,
+Windows: `node $HOME\.svyazka\app\cli\agent-rules.mjs remove`, then delete `~\.svyazka\app`, `~\.svyazka\bin`, `~\.svyazka\node`,
 `~\.claude\skills\svyazka`, `~\.codex\skills\svyazka` and the «Связка» Start-menu shortcut.
 The vault (`~/.svyazka/vault.json`) is left in place — delete it only if you have a backup or don't need it.
 

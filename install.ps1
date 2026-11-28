@@ -1,32 +1,103 @@
 ﻿# Связка — установка на Windows одним запуском:
 #   команда svyazka, ярлык «Связка» в меню «Пуск», навык и правило для Claude Code и Codex.
 # Хранилище (%USERPROFILE%\.svyazka\vault.json) не трогается: повторный запуск = обновление.
-#   powershell -ExecutionPolicy Bypass -File install.ps1
+#
+#   irm https://github.com/rdm9x/svyazka/releases/latest/download/install.ps1 -OutFile $env:TEMP\svyazka-install.ps1
+#   powershell -ExecutionPolicy Bypass -File $env:TEMP\svyazka-install.ps1   # скачает релиз сам
+#   powershell -ExecutionPolicy Bypass -File install.ps1      # из распакованного релиза или клона
+#
+# Если нет Node.js 20+, установщик скачает Node с nodejs.org (проверяет контрольную сумму) в ~\.svyazka\node —
+# только для Связки, систему не трогает. Переменные: SVYAZKA_NODE=download, SVYAZKA_RELEASE_URL, SVYAZKA_NODE_DIST.
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 function Ok($m) { Write-Host "✓ $m" -ForegroundColor Green }
 function Warn($m) { Write-Host "! $m" -ForegroundColor Yellow }
-function Die($m) { Write-Host "✗ $m" -ForegroundColor Red; exit 1 }
+# если скрипт запустили через iex, exit закрыл бы окно PowerShell — при скачивании ошибка выбрасывается
+function Die($m) { Write-Host "✗ $m" -ForegroundColor Red; if ($script:Boot) { throw $m } else { exit 1 } }
+function First($file, $pattern) { $m = Select-String -Path $file -Pattern $pattern | Select-Object -First 1; if ($m) { $m.Matches[0].Value } }
+function Fetch($url, $out) {
+  if ($url -match '^file:') { Copy-Item -LiteralPath ([Uri]$url).LocalPath -Destination $out -Force }
+  else { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $out }
+}
+function Sum($file) { (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLower() }
+function SumFor($sums, $name) { foreach ($l in Get-Content $sums) { $p = $l -split '\s+'; if ($p.Count -ge 2 -and $p[1] -eq $name) { return $p[0].ToLower() } } }
 
 $Src = $PSScriptRoot
+
+# Запуск одной строкой (скачан только install.ps1): скачать последний релиз, проверить сумму, запустить его install.ps1
+if (-not $Src -or -not (Test-Path (Join-Path $Src 'cli\svyazka.mjs'))) {
+  $script:Boot = $true
+  $rel = if ($env:SVYAZKA_RELEASE_URL) { $env:SVYAZKA_RELEASE_URL } else { 'https://github.com/rdm9x/svyazka/releases/latest/download' }
+  $t = Join-Path ([IO.Path]::GetTempPath()) ('svyazka-' + [Guid]::NewGuid().ToString('N'))
+  New-Item -ItemType Directory -Force -Path $t | Out-Null
+  try {
+    Fetch "$rel/SHA256SUMS.txt" "$t\SUMS"
+    $zip = First "$t\SUMS" 'svyazka-[0-9][0-9.]*\.zip'
+    if (-not $zip) { Die 'В SHA256SUMS.txt нет архива Связки' }
+    Fetch "$rel/$zip" "$t\$zip"
+    if ((Sum "$t\$zip") -ne (SumFor "$t\SUMS" $zip)) { Die "Контрольная сумма $zip не совпала — не устанавливаю" }
+    Ok "скачан $zip, контрольная сумма совпала"
+    Expand-Archive -LiteralPath "$t\$zip" -DestinationPath $t -Force
+    & powershell -NoProfile -ExecutionPolicy Bypass -File "$t\svyazka\install.ps1"
+    if ($LASTEXITCODE) { throw "установка не удалась (код $LASTEXITCODE)" }
+  } finally { Remove-Item -Recurse -Force $t -ErrorAction SilentlyContinue }
+  return
+}
+
 $Dir = Join-Path $HOME '.svyazka'
 $App = Join-Path $Dir 'app'
 $Bin = Join-Path $Dir 'bin'
+New-Item -ItemType Directory -Force -Path $Dir, $Bin | Out-Null
 
-$node = Get-Command node -ErrorAction SilentlyContinue
-if (-not $node) { Die 'Нужен Node.js 20+: winget install OpenJS.NodeJS.LTS (или https://nodejs.org)' }
-$major = [int](& node -p "process.versions.node.split('.')[0]")
-if ($major -lt 20) { Die "Node.js $(& node -v) слишком старый — нужен 20+" }
-Ok "Windows, Node.js $(& node -v) — есть"
+function NodeOk($p) {
+  if (-not $p -or -not (Test-Path -LiteralPath $p)) { return $false }
+  try { & $p -e 'process.exit(+process.versions.node.split(".")[0] >= 20 ? 0 : 1)' 2>$null; return $LASTEXITCODE -eq 0 } catch { return $false }
+}
+$NodeDir = Join-Path $Dir 'node'
+$node = $null
+if ($env:SVYAZKA_NODE -ne 'download') {
+  $c = Get-Command node -ErrorAction SilentlyContinue
+  foreach ($p in @($(if ($c) { $c.Source }), (Join-Path $NodeDir 'node.exe'))) { if (NodeOk $p) { $node = $p; break } }
+}
+if ($node) { Ok "Node.js $(& $node -v) — есть ($node)" }
+else {
+  # свой Node: последняя версия LTS-ветки, сумма — из SHASUMS256.txt того же выпуска Node
+  $dist = if ($env:SVYAZKA_NODE_DIST) { $env:SVYAZKA_NODE_DIST } else { 'https://nodejs.org/dist/latest-v24.x' }
+  $plat = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'win-arm64' } else { 'win-x64' }
+  $t = Join-Path ([IO.Path]::GetTempPath()) ('svyazka-node-' + [Guid]::NewGuid().ToString('N'))
+  New-Item -ItemType Directory -Force -Path $t | Out-Null
+  try {
+    try { Fetch "$dist/SHASUMS256.txt" "$t\SUMS" } catch { Die "Не удалось скачать Node.js с $dist — проверьте интернет или поставьте Node.js 20+: winget install OpenJS.NodeJS.LTS" }
+    $f = First "$t\SUMS" "node-v[0-9.]*-$plat\.zip"
+    if (-not $f) { Die "Не нашёл Node для $plat в $dist" }
+    $mark = Join-Path $NodeDir '.svyazka-node'
+    if ((Test-Path $mark) -and ((Get-Content $mark -Raw).Trim() -eq $f) -and (NodeOk (Join-Path $NodeDir 'node.exe'))) {
+      $node = Join-Path $NodeDir 'node.exe'
+    } else {
+      Write-Host "… Node.js 20+ не найден — скачиваю $f с nodejs.org (~30 МБ, только для Связки)"
+      Fetch "$dist/$f" "$t\$f"
+      if ((Sum "$t\$f") -ne (SumFor "$t\SUMS" $f)) { Die "Контрольная сумма $f не совпала — не устанавливаю" }
+      Expand-Archive -LiteralPath "$t\$f" -DestinationPath "$t\x" -Force
+      if (Test-Path $NodeDir) { Remove-Item -Recurse -Force $NodeDir }
+      Move-Item (Get-ChildItem "$t\x" | Select-Object -First 1).FullName $NodeDir
+      Set-Content -Path $mark -Value $f -Encoding ASCII
+      $node = Join-Path $NodeDir 'node.exe'
+      if (-not (NodeOk $node)) { Die 'Скачанный Node не запускается' }
+    }
+  } finally { Remove-Item -Recurse -Force $t -ErrorAction SilentlyContinue }
+  Ok "Node.js $(& $node -v) — свой, в ~\.svyazka\node"
+}
 
 # остановить старую версию, если была
-if (Test-Path (Join-Path $App 'cli\svyazka.mjs')) { & node (Join-Path $App 'cli\svyazka.mjs') stop *> $null }
+if (Test-Path (Join-Path $App 'cli\svyazka.mjs')) { & $node (Join-Path $App 'cli\svyazka.mjs') stop *> $null }
 
 New-Item -ItemType Directory -Force -Path $Dir, $Bin | Out-Null
 if ((Resolve-Path $Src).Path -ne $App) {
   $tmp = "$App.new"
   if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
   New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-  Get-ChildItem -Force $Src | Where-Object { $_.Name -notin @('.git', 'dist', 'docs', '.github') } |
+  Get-ChildItem -Force $Src | Where-Object { $_.Name -notin @('.git', 'dist', 'docs', '.github', 'prebuilt') } |
     Copy-Item -Destination $tmp -Recurse -Force
   if (Test-Path $App) { Remove-Item -Recurse -Force $App }
   Move-Item $tmp $App
@@ -34,7 +105,9 @@ if ((Resolve-Path $Src).Path -ne $App) {
 Ok "файлы Связки — в $App"
 
 # команда svyazka
-Set-Content -Path (Join-Path $Bin 'svyazka.cmd') -Encoding ASCII -Value "@node `"%USERPROFILE%\.svyazka\app\cli\svyazka.mjs`" %*"
+# полный путь к node: ярлык и агенты запускают svyazka без вашего PATH; путь в профиле — через %USERPROFILE% (файл в ASCII)
+$nodeRef = if ($node.StartsWith($HOME, [StringComparison]::OrdinalIgnoreCase)) { '%USERPROFILE%' + $node.Substring($HOME.Length) } else { $node }
+Set-Content -Path (Join-Path $Bin 'svyazka.cmd') -Encoding ASCII -Value "@`"$nodeRef`" `"%USERPROFILE%\.svyazka\app\cli\svyazka.mjs`" %*"
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 if (-not (($userPath -split ';') -contains $Bin)) {
   [Environment]::SetEnvironmentVariable('Path', ($(if ($userPath) { "$userPath;" } else { '' }) + $Bin), 'User')
@@ -69,7 +142,7 @@ foreach ($agent in @('.claude', '.codex')) {
 }
 Ok "навык svyazka → ~\.claude\skills$(if (Test-Path (Join-Path $HOME '.codex')) { ' и ~\.codex\skills' })"
 
-& node (Join-Path $App 'cli\agent-rules.mjs') install
+& $node (Join-Path $App 'cli\agent-rules.mjs') install
 
 $agentSvc = Get-Service ssh-agent -ErrorAction SilentlyContinue
 if (-not $agentSvc) { Warn 'OpenSSH не найден — svyazka ssh не будет работать (Параметры → Приложения → Дополнительные компоненты → Клиент OpenSSH)' }

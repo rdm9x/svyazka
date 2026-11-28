@@ -17,10 +17,15 @@ jobs:
         run: |
           VER=$(sed -n "s/^const VERSION = '\(.*\)';/\1/p" app.js)
           [ "v$VER" = "$GITHUB_REF_NAME" ] || { echo "app.js VERSION=$VER, tag=$GITHUB_REF_NAME"; exit 1; }
+      - name: Build macOS programs (universal)
+        run: |
+          ARCHS="arm64 x86_64" sh cli/build-mac.sh prebuilt/macos
+          lipo -archs prebuilt/macos/svyazka-touchid | grep -q 'x86_64 arm64'
       - run: ./pack.sh
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          (cd dist && shasum -a 256 *.zip > SHA256SUMS.txt)
-          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS.txt --title "Svyazka $GITHUB_REF_NAME" --notes-file <(sed -n "/^## ${GITHUB_REF_NAME#v}/,/^## /p" CHANGELOG.md | sed '$d')
+          cp install.sh install.ps1 dist/
+          (cd dist && shasum -a 256 *.zip install.sh install.ps1 > SHA256SUMS.txt)
+          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/install.sh dist/install.ps1 dist/SHA256SUMS.txt --title "Svyazka $GITHUB_REF_NAME" --notes-file <(sed -n "/^## ${GITHUB_REF_NAME#v}/,/^## /p" CHANGELOG.md | sed '$d')

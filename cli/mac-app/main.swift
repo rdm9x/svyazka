@@ -1,6 +1,7 @@
 // Связка.app — окно для Связки на Mac.
 // Запускает (или находит) агент svyazka, берёт у него одноразовый адрес интерфейса и показывает его во встроенном WebKit.
-// NODE и SCRIPT подставляет build-app.sh (paths.swift).
+// Команду svyazka (~/.local/bin/svyazka — обёртка с путём к Node) ставит установщик; само окно путей не знает,
+// поэтому одна и та же сборка подходит всем (её собирает CI для релиза).
 
 import Cocoa
 import WebKit
@@ -64,10 +65,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
   static func svyazka(_ args: [String]) -> (out: String?, err: String?) {
     let p = Process()
-    p.executableURL = URL(fileURLWithPath: NODE)
-    p.arguments = [SCRIPT] + args
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    p.executableURL = URL(fileURLWithPath: home + "/.local/bin/svyazka")
+    p.arguments = args
     var env = ProcessInfo.processInfo.environment
-    env["PATH"] = (env["PATH"].map { $0 + ":" } ?? "") + "/usr/bin:/bin:/usr/sbin:/sbin:" + (NODE as NSString).deletingLastPathComponent
+    // запасной путь к node для старой установки ссылкой (#!/usr/bin/env node)
+    env["PATH"] = (env["PATH"].map { $0 + ":" } ?? "") + "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin:" + home + "/.svyazka/node/bin"
     p.environment = env
     let out = Pipe(), err = Pipe()
     p.standardOutput = out

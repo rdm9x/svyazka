@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.5.0 — 2026-11-28
+
+- **Install without preparation**: one line (`curl … | sh` on macOS / Linux, two PowerShell lines on Windows) downloads
+  the latest release and checks its checksum. Xcode Command Line Tools are no longer needed: the Touch ID helper and
+  `Связка.app` come prebuilt in the release (universal: Apple Silicon and Intel). No Node.js 20+ → the installer
+  downloads Node LTS from nodejs.org (checksum-verified) into `~/.svyazka/node`, only for Svyazka.
+- `~/.local/bin/svyazka` (and `svyazka.cmd` on Windows) is now a small wrapper with the full path to Node, so the app,
+  the Start-menu shortcut and agents find it without your `PATH`. The app no longer has paths built in.
+- After this update macOS may ask once to let `svyazka-touchid` use the “Svyazka” Keychain item — enter your Mac
+  password and click “Always Allow”. Later updates replace the helper only when it actually changes.
+- The installer now closes only its own `Связка.app`, not any running copy.
+
 ## 1.4.1 — 2026-11-27
 
 - **Fix:** the app window opened without Touch ID when the agent was already unlocked (e.g. after an agent used
@@ -45,4 +57,4 @@ First public release.
 - English interface.
 - MCP server (`svyazka mcp`) for Cursor, Gemini CLI, Claude Desktop and other agents.
 - Import from Bitwarden, 1Password, KeePassXC, browser exports; export back.
-- TOTP (2FA) codes; macOS notifications for upcoming payments; Homebrew tap.
+- TOTP (2FA) codes; macOS notifications for upcoming payments; Homebrew tap; signed and notarized builds.

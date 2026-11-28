@@ -19,14 +19,27 @@ jobs:
       - name: Tests
         shell: bash
         run: node --test 'test/*.test.mjs'
-      - name: Build Touch ID helper and Связка.app
+      - name: Build macOS programs (universal) and package
         if: runner.os == 'macOS'
         run: |
-          swiftc -O cli/touchid.swift -o "$RUNNER_TEMP/svyazka-touchid"
-          sh cli/build-app.sh
-      - name: Package
+          ARCHS="arm64 x86_64" sh cli/build-mac.sh prebuilt/macos
+          lipo -archs prebuilt/macos/svyazka-touchid | grep -q 'x86_64 arm64'
+          lipo -archs "prebuilt/macos/Связка.app/Contents/MacOS/Svyazka" | grep -q 'x86_64 arm64'
+          ./pack.sh
+          (cd dist && shasum -a 256 *.zip > SHA256SUMS.txt)
+      - name: One-line install on a clean macOS home (prebuilt programs, downloaded Node)
         if: runner.os == 'macOS'
-        run: ./pack.sh
+        run: |
+          export HOME="$(mktemp -d)" SVYAZKA_RELEASE_URL="file://$PWD/dist" SVYAZKA_NODE=download
+          (cd "$HOME" && sh < "$GITHUB_WORKSPACE/install.sh")
+          grep -q '.svyazka/node/bin/node' "$HOME/.local/bin/svyazka"
+          test -x "$HOME/.svyazka/bin/svyazka-touchid"
+          test -x "$HOME/Applications/Связка.app/Contents/MacOS/Svyazka"
+          codesign -v "$HOME/Applications/Связка.app"
+          "$HOME/.local/bin/svyazka" help | head -1
+          export SVYAZKA_HOME=$(mktemp -d) SVYAZKA_TEST=1 SVYAZKA_TEST_PASSWORD=ci-pass-123 SVYAZKA_TEST_CONFIRM=1
+          "$HOME/.local/bin/svyazka" init && "$HOME/.local/bin/svyazka" add password CI --shelf Test --login ci --password gen
+          "$HOME/.local/bin/svyazka" ls Test && "$HOME/.local/bin/svyazka" stop
       - name: Install on Linux (install.sh) and smoke-test
         if: runner.os == 'Linux'
         run: |
@@ -37,6 +50,17 @@ jobs:
           grep -q 'svyazka:begin' "$HOME/.claude/CLAUDE.md"
           export SVYAZKA_HOME=$(mktemp -d) SVYAZKA_TEST=1 SVYAZKA_TEST_PASSWORD=ci-pass-123 SVYAZKA_TEST_CONFIRM=1
           svyazka init && svyazka add password CI --shelf Test --login ci --password gen && svyazka ls Test && svyazka stop
+      - name: One-line install on a clean Linux home (downloaded Node)
+        if: runner.os == 'Linux'
+        run: |
+          ./pack.sh
+          (cd dist && sha256sum *.zip > SHA256SUMS.txt)
+          export HOME="$(mktemp -d)" SVYAZKA_RELEASE_URL="file://$PWD/dist" SVYAZKA_NODE=download
+          (cd "$HOME" && sh < "$GITHUB_WORKSPACE/install.sh")
+          grep -q '.svyazka/node/bin/node' "$HOME/.local/bin/svyazka"
+          export SVYAZKA_HOME=$(mktemp -d) SVYAZKA_TEST=1 SVYAZKA_TEST_PASSWORD=ci-pass-123 SVYAZKA_TEST_CONFIRM=1
+          "$HOME/.local/bin/svyazka" init && "$HOME/.local/bin/svyazka" add password CI --shelf Test --login ci --password gen
+          "$HOME/.local/bin/svyazka" ls Test && "$HOME/.local/bin/svyazka" stop
       - name: Install on Windows (install.ps1) and smoke-test
         if: runner.os == 'Windows'
         shell: pwsh
@@ -48,6 +72,29 @@ jobs:
           if (-not (Test-Path "$HOME\.claude\skills\svyazka\SKILL.md")) { throw 'нет навыка' }
           if (-not (Select-String -Path "$HOME\.claude\CLAUDE.md" -Pattern 'svyazka:begin' -Quiet)) { throw 'нет правила' }
           $env:SVYAZKA_HOME = Join-Path $env:TEMP 'sv-ci'; $env:SVYAZKA_TEST = '1'; $env:SVYAZKA_TEST_PASSWORD = 'ci-pass-123'; $env:SVYAZKA_TEST_CONFIRM = '1'
+          svyazka init
+          svyazka add password "CI" --shelf Test --login ci --password gen
+          svyazka ls Test
+          svyazka stop
+      - name: One-line install on Windows (downloaded install.ps1, downloaded Node)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $rel = Join-Path $env:RUNNER_TEMP 'rel'
+          $src = Join-Path $rel 'src\svyazka'
+          New-Item -ItemType Directory -Force -Path $src | Out-Null
+          git ls-files | ForEach-Object { $d = Join-Path $src (Split-Path $_); New-Item -ItemType Directory -Force -Path $d | Out-Null; Copy-Item -LiteralPath $_ -Destination $d }
+          Compress-Archive -Path $src -DestinationPath (Join-Path $rel 'svyazka-0.0.0.zip')
+          "$((Get-FileHash (Join-Path $rel 'svyazka-0.0.0.zip')).Hash.ToLower())  svyazka-0.0.0.zip" | Set-Content (Join-Path $rel 'SHA256SUMS.txt')
+          $env:SVYAZKA_RELEASE_URL = 'file:///' + ($rel -replace '\\', '/')
+          $env:SVYAZKA_NODE = 'download'
+          # как однострочник из README: install.ps1 скачан отдельно, рядом нет файлов Связки
+          Copy-Item install.ps1 (Join-Path $env:TEMP 'sv-install.ps1')
+          powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $env:TEMP 'sv-install.ps1')
+          if ($LASTEXITCODE) { throw 'установка не удалась' }
+          if (-not (Select-String -Path "$HOME\.svyazka\bin\svyazka.cmd" -Pattern '.svyazka\node\node.exe' -SimpleMatch -Quiet)) { throw 'svyazka.cmd не на своём Node' }
+          $env:Path = "$env:Path;$HOME\.svyazka\bin"
+          $env:SVYAZKA_HOME = Join-Path $env:TEMP 'sv-ci2'; $env:SVYAZKA_TEST = '1'; $env:SVYAZKA_TEST_PASSWORD = 'ci-pass-123'; $env:SVYAZKA_TEST_CONFIRM = '1'
           svyazka init
           svyazka add password "CI" --shelf Test --login ci --password gen
           svyazka ls Test

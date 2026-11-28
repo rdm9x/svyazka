@@ -14,18 +14,19 @@ end to end.
 | `cli/platform.mjs` | everything OS-specific: dialogs, Touch ID / Windows Hello, clipboard, opening the UI |
 | `cli/touchid.swift` | Touch ID confirmation helper |
 | `cli/mac-app/` | `Связка.app` (WebKit window) and its icon |
+| `cli/build-mac.sh` | compile the helper and the app (`ARCHS="arm64 x86_64"` — universal, as the release does) |
 | `cli/skill/SKILL.md` | the skill for Claude Code and Codex |
 | `cli/agent-rules.mjs` | the standing rule in `~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md` |
 | `install.sh`, `install.ps1` | install on macOS & Linux / on Windows |
 | `cli/win/` | Windows Start-menu launcher |
-| `pack.sh` | build a release zip |
+| `pack.sh` | build a release zip (includes `prebuilt/` if present) |
 | `test/` | `node --test` suites |
 
 ## Develop
 
 ```bash
-sh cli/install.sh       # links ~/.local/bin/svyazka to your checkout
-sh cli/build-app.sh     # rebuilds ~/Applications/Связка.app
+sh cli/install.sh       # ~/.local/bin/svyazka runs your checkout; compiles the Touch ID helper
+sh cli/build-app.sh     # compiles ~/Applications/Связка.app from source
 npm test                # or: node --test 'test/*.test.mjs'
 ```
 
@@ -47,5 +48,6 @@ svyazka init && svyazka ui
 
 ## Releases
 
-Bump `VERSION` in `app.js` (and `package.json`), add a `CHANGELOG.md` section, tag `vX.Y.Z` — CI builds the zip and
-publishes the GitHub Release.
+Bump `VERSION` in `app.js` and `version` in `package.json` (the app's bundle version is taken from `app.js`), add a
+`CHANGELOG.md` section, tag `vX.Y.Z`. The Release workflow builds the universal macOS helper and app into `prebuilt/`,
+packs the zip and publishes it with `install.sh`, `install.ps1` and `SHA256SUMS.txt`.

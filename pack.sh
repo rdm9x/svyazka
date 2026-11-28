@@ -11,6 +11,8 @@ git -c core.quotepath=off ls-files -co --exclude-standard | grep -v -e '^pack.sh
   mkdir -p "$B/svyazka/$(dirname "$f")"
   cp -p "$f" "$B/svyazka/$f"
 done
+# готовые программы для macOS (собирает CI: ARCHS="arm64 x86_64" sh cli/build-mac.sh prebuilt/macos)
+[ -d prebuilt ] && cp -R prebuilt "$B/svyazka/prebuilt"
 chmod +x "$B/svyazka/install.sh" "$B/svyazka/cli/"*.sh "$B/svyazka/cli/svyazka.mjs"
 rm -f "$OUT"
 (cd "$B" && COPYFILE_DISABLE=1 zip -qrX "$OLDPWD/$OUT" svyazka)

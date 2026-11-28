@@ -42,33 +42,39 @@ svyazka add token "Cloudflare API" --shelf my-app --value ask   # значени
 
 ## Установка
 
-Нужен Node.js 20+ и
-- **macOS** 13+ с Command Line Tools (`xcode-select --install`),
-- **Windows** 10/11 (клиент OpenSSH для `svyazka ssh`; желательно Windows Hello),
-- **Linux** — пароль в терминале или окна через `zenity`; буфер — `wl-copy`/`xclip`.
+Заранее ничего ставить не нужно: macOS 13+, Windows 10/11 или Linux (x64 / arm64).
+Если нет Node.js 20+, установщик сам скачает его с nodejs.org (с проверкой контрольной суммы) в `~/.svyazka/node` —
+отдельная копия только для Связки. На Mac помощник Touch ID и приложение приходят в релизе уже собранными, поэтому
+Xcode и Command Line Tools не нужны.
 
-**Поручите агенту.** Скачайте последний [релиз](https://github.com/rdm9x/svyazka/releases), распакуйте, откройте Claude Code (или Codex) в этой папке и напишите:
+**macOS / Linux** — одна строка в Терминале:
+
+```bash
+curl -fsSL https://github.com/rdm9x/svyazka/releases/latest/download/install.sh | sh
+```
+
+**Windows** — PowerShell:
+
+```powershell
+irm https://github.com/rdm9x/svyazka/releases/latest/download/install.ps1 -OutFile $env:TEMP\svyazka-install.ps1
+powershell -ExecutionPolicy Bypass -File $env:TEMP\svyazka-install.ps1
+```
+
+Потом создайте хранилище: `svyazka init` (откроется окно для мастер-пароля). Повторный запуск установщика обновляет
+Связку, хранилище не трогается.
+
+**Или поручите агенту.** Скачайте последний [релиз](https://github.com/rdm9x/svyazka/releases), распакуйте, откройте Claude Code (или Codex) в этой папке и напишите:
 
 > Установи Связку по инструкции AGENT_INSTALL.md
 
-Агент проверит, что нужно, всё установит, создаст хранилище, подключит Codex, если он есть, и предложит перенести
+Агент всё установит, создаст хранилище, подключит Codex, если он есть, и предложит перенести
 имеющиеся ключи из `~/.ssh` и `.env` — не показывая их значений.
 
-**Или сами:**
+Из клона git: `sh install.sh` (macOS / Linux) или `powershell -ExecutionPolicy Bypass -File install.ps1` (Windows).
+В клоне нет готовых программ для Mac, там они собираются — для этого нужны Command Line Tools (`xcode-select --install`).
 
-```bash
-git clone https://github.com/rdm9x/svyazka && cd svyazka
-sh install.sh        # macOS / Linux: svyazka в ~/.local/bin, приложение, навыки для Claude Code и Codex
-svyazka init         # создать хранилище — откроется окно для мастер-пароля
-```
-
-Windows (PowerShell):
-
-```powershell
-git clone https://github.com/rdm9x/svyazka; cd svyazka
-powershell -ExecutionPolicy Bypass -File install.ps1   # svyazka, ярлык в «Пуске», навыки
-svyazka init
-```
+Дополнительно: на Windows для `svyazka ssh` нужен клиент OpenSSH (желательно Windows Hello); на Linux окна — через
+`zenity`, буфер обмена — `wl-copy`/`xclip`.
 
 Установщик добавляет короткий блок в `~/.claude/CLAUDE.md` и `~/.codex/AGENTS.md` между метками
 `<!-- svyazka:begin/end -->` (исходный файл сохраняется копией `.bak-svyazka`).
@@ -116,11 +122,11 @@ macOS, Windows и Linux. Интерфейс на русском (английс�
 ## Удаление
 
 ```bash
-node ~/.svyazka/app/cli/agent-rules.mjs remove
+$(command -v node || echo ~/.svyazka/node/bin/node) ~/.svyazka/app/cli/agent-rules.mjs remove
 rm -f ~/.local/bin/svyazka ~/.claude/skills/svyazka ~/.codex/skills/svyazka
-rm -rf ~/Applications/Связка.app ~/.svyazka/app
+rm -rf ~/Applications/Связка.app ~/.svyazka/app ~/.svyazka/node
 ```
-Windows: `node $HOME\.svyazka\app\cli\agent-rules.mjs remove`, затем удалить `~\.svyazka\app`, `~\.svyazka\bin`,
+Windows: `node $HOME\.svyazka\app\cli\agent-rules.mjs remove`, затем удалить `~\.svyazka\app`, `~\.svyazka\bin`, `~\.svyazka\node`,
 `~\.claude\skills\svyazka`, `~\.codex\skills\svyazka` и ярлык «Связка» в меню «Пуск».
 Хранилище (`~/.svyazka/vault.json`) остаётся — удаляйте его, только если есть бэкап или оно не нужно.
 
